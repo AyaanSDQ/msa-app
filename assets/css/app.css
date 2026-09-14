@@ -428,3 +428,25 @@ textarea.input { min-height: 90px; resize: vertical; border-radius: var(--radius
   padding-top: 0 !important; padding-bottom: 0 !important;
   border-width: 0 !important;
 }
+
+/* ══════════════════ PWA install banner ══════════════════ */
+
+.install-banner {
+  display: flex; align-items: flex-start; gap: 12px;
+  background: var(--color-neutral-100); border-radius: 18px;
+  padding: 14px 40px 14px 14px; margin-bottom: 18px; box-shadow: var(--shadow-sm);
+  position: relative; color: var(--color-text);
+}
+.install-banner > svg { flex: none; margin-top: 2px; color: var(--color-accent); }
+.install-copy { flex: 1; min-width: 0; }
+.install-title { font-weight: 700; font-size: 14px; }
+.install-sub { font-size: 12.5px; color: var(--color-neutral-700); margin-top: 3px; line-height: 1.5; }
+.install-banner .btn-primary { flex: none; font-size: 12.5px; padding: 8px 14px; border-radius: 10px; align-self: center; }
+.install-steps { margin: 6px 0 0; padding-left: 18px; }
+.install-steps li { margin-bottom: 3px; }
+.install-steps svg { vertical-align: -2px; }
+.install-dismiss {
+  position: absolute; top: 10px; right: 10px; background: none; border: 0;
+  color: var(--color-neutral-500); cursor: pointer; padding: 4px; line-height: 0;
+}
+.install-dismiss:hover { color: var(--color-text); }

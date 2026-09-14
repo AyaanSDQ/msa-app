@@ -13,6 +13,9 @@ export const ICON_SPRITE = `
 <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
 <symbol id="i-back" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></symbol>
 <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z"/></symbol>
+<symbol id="i-share" viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 8 5-5 5 5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></symbol>
+<symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+<symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v12"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></symbol>
 <symbol id="i-msg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
 <symbol id="banner-mosque" viewBox="0 0 400 132" preserveAspectRatio="xMidYMax slice"><g fill="currentColor" stroke="none"><path d="M0 122h400v10H0z"/><path d="M64 104h272v18H64z"/><path d="M162 122V86c0-20 14-32 38-46 24 14 38 26 38 46v36z"/><path d="M197 40V26h6v14z"/><circle cx="200" cy="21" r="5"/><path d="M128 122v-22c0-10 6-16 15-22 9 6 15 12 15 22v22z"/><path d="M242 122v-22c0-10 6-16 15-22 9 6 15 12 15 22v22z"/><path d="M92 122V62h18v60z"/><path d="M88 74h26v6H88z"/><path d="M92 62c0-10 4-16 9-22 5 6 9 12 9 22z"/><path d="M99 40V28h4v12z"/><path d="M290 122V62h18v60z"/><path d="M286 74h26v6h-26z"/><path d="M290 62c0-10 4-16 9-22 5 6 9 12 9 22z"/><path d="M297 40V28h4v12z"/><path d="M44 122V88h14v34z"/><path d="M44 88c0-8 3-13 7-18 4 5 7 10 7 18z"/><path d="M342 122V88h14v34z"/><path d="M342 88c0-8 3-13 7-18 4 5 7 10 7 18z"/></g></symbol>
 <symbol id="banner-social" viewBox="0 0 400 132" preserveAspectRatio="xMidYMax slice"><g fill="currentColor" stroke="none">

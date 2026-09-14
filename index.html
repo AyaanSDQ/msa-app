@@ -5,8 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>MSA Updates</title>
 <meta name="description" content="Prayer times, locations, and event updates for the MSA.">
-<link rel="stylesheet" href="assets/css/app.css?v=3">
+<link rel="stylesheet" href="assets/css/app.css?v=4">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="assets/icons/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icons/icon-192.png">
 <meta name="theme-color" content="#c67139">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="MSA Updates">
 </head>
 <body>
 
@@ -17,6 +23,8 @@
     <div class="app-title">MSA Updates</div>
     <a href="exec.html" class="exec-link">Exec login</a>
   </header>
+
+  <div id="install-banner" class="install-banner" hidden></div>
 
   <div id="skeleton">
     <div class="skeleton skeleton-hero"></div>
@@ -48,9 +56,11 @@
 </div>
 
 <script type="module">
-  import { ICON_SPRITE } from "./assets/js/icons.js?v=1";
+  import { ICON_SPRITE } from "./assets/js/icons.js?v=3";
   document.getElementById("icon-sprite").innerHTML = ICON_SPRITE;
 </script>
 <script type="module" src="assets/js/reader.js?v=2"></script>
+<script type="module" src="assets/js/install.js?v=1"></script>
+<script src="assets/js/sw-register.js?v=1"></script>
 </body>
 </html>
