@@ -345,6 +345,7 @@ textarea.input { min-height: 90px; resize: vertical; border-radius: var(--radius
 
 /* ══════════════════ Exec: events list ══════════════════ */
 
+.exec-card, .exec-cancelled-card { cursor: pointer; }
 .exec-card {
   border-radius: 20px; padding: 15px; box-shadow: var(--shadow-sm);
   display: flex; gap: 11px; align-items: center; margin-bottom: 10px;
@@ -365,3 +366,34 @@ textarea.input { min-height: 90px; resize: vertical; border-radius: var(--radius
 .badge-exec { background: var(--type-exec_meeting-list); color: var(--type-exec_meeting-icon); }
 .badge-deleted { background: var(--color-neutral-400); color: #fff; }
 .exec-cancelled-card { border-radius: 20px; box-shadow: var(--shadow-sm); overflow: hidden; margin-bottom: 10px; }
+
+/* ══════════════════ Exec: event detail ══════════════════ */
+
+.back-link {
+  display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px;
+  text-decoration: none; color: var(--color-neutral-700); margin-bottom: 14px;
+  background: none; border: 0; cursor: pointer; padding: 0; font-family: var(--font-body);
+}
+.back-link:hover { color: var(--color-text); }
+
+.detail-meta-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px;
+  padding-top: 14px; border-top: 1px solid rgba(255,255,255,.28); font-size: 12.5px;
+}
+.detail-meta-label { font-size: 9.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+
+.feedback-entry {
+  background: var(--color-neutral-100); border-radius: 18px; padding: 15px;
+  box-shadow: var(--shadow-sm); display: flex; gap: 10px; margin-bottom: 9px;
+}
+.feedback-entry-body { font-size: 13px; margin: 0; }
+.feedback-entry-meta { font-size: 11px; color: var(--color-neutral-600); margin-top: 7px; }
+
+.detail-actionbar {
+  display: flex; gap: 8px; margin-top: 20px; padding-top: 14px;
+  border-top: 1px solid var(--color-neutral-300);
+}
+.detail-actionbar .btn { flex: 1; border-radius: 12px; }
+.btn-cancel-action { border: 1.5px solid var(--color-danger); color: var(--color-danger); background: transparent; }
+.btn-delete-action { background: var(--color-danger); color: #fff; }
+.btn-restore-action { border: 1.5px solid #27506f; color: #27506f; background: transparent; }

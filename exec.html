@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>MSA Updates — Exec</title>
-<link rel="stylesheet" href="assets/css/app.css?v=1">
+<link rel="stylesheet" href="assets/css/app.css?v=2">
 <meta name="theme-color" content="#c67139">
 </head>
 <body>
@@ -27,64 +27,92 @@
   </div>
 
   <div id="app-view" hidden>
-    <div class="exec-topbar">
-      <div class="app-title">All events</div>
-      <span class="tag" id="exec-name-tag" style="background:var(--type-social-list);color:var(--type-social-icon);font-size:10px">Exec</span>
-      <button type="button" id="logout-btn" class="logout-link">Log out</button>
+
+    <div id="list-view">
+      <div class="exec-topbar">
+        <div class="app-title">All events</div>
+        <span class="tag" id="exec-name-tag" style="background:var(--type-social-list);color:var(--type-social-icon);font-size:10px">Exec</span>
+        <button type="button" id="logout-btn" class="logout-link">Log out</button>
+      </div>
+
+      <div class="new-post-box">
+        <button type="button" id="new-post-toggle" class="new-post-toggle">
+          <span class="plus-icon">PLUS_ICON</span>
+          <span class="label">New post</span>
+          <span id="new-post-chev" class="chev collapsed">CHEV_ICON</span>
+        </button>
+
+        <form id="post-form" class="post-form">
+          <div class="type-grid" id="type-grid">
+            <button type="button" class="type-option selected" data-type="prayer">Prayer</button>
+            <button type="button" class="type-option" data-type="social">Social</button>
+            <button type="button" class="type-option" data-type="announcement">Announcement</button>
+            <button type="button" class="type-option" data-type="exec_meeting">Exec meeting</button>
+          </div>
+
+          <div id="form-error" class="error-banner" hidden></div>
+
+          <div class="form-grid">
+            <div class="field"><label>Title</label><input class="input" name="title" required></div>
+            <div class="field"><label id="location-label">Room</label><input class="input" name="location"></div>
+            <div class="field"><label>Time</label><input class="input" type="datetime-local" name="event_time"></div>
+            <div class="field"><label>Notes</label><textarea class="input" name="notes"></textarea></div>
+            <label class="toggle-row">
+              <input type="checkbox" name="accepts_feedback">
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              Accept feedback
+            </label>
+            <div class="form-hint">Room is used for prayer and exec-meeting posts; social and announcement posts use a general location instead.</div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">Post update</button>
+              <button type="button" id="discard-btn" class="btn btn-secondary">Discard</button>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <div id="list-skeleton">
+        <div class="skeleton skeleton-line"></div>
+        <div class="skeleton skeleton-line"></div>
+        <div class="skeleton skeleton-line"></div>
+      </div>
+      <div id="events-list"></div>
     </div>
 
-    <div class="new-post-box">
-      <button type="button" id="new-post-toggle" class="new-post-toggle">
-        <span class="plus-icon">PLUS_ICON</span>
-        <span class="label">New post</span>
-        <span id="new-post-chev" class="chev collapsed">CHEV_ICON</span>
+    <div id="detail-view" hidden>
+      <button type="button" id="detail-back" class="back-link">
+        <span class="back-icon">BACK_ICON</span>All events
       </button>
 
-      <form id="post-form" class="post-form">
-        <div class="type-grid" id="type-grid">
-          <button type="button" class="type-option selected" data-type="prayer">Prayer</button>
-          <button type="button" class="type-option" data-type="social">Social</button>
-          <button type="button" class="type-option" data-type="announcement">Announcement</button>
-          <button type="button" class="type-option" data-type="exec_meeting">Exec meeting</button>
-        </div>
+      <div id="detail-skeleton">
+        <div class="skeleton skeleton-hero"></div>
+      </div>
 
-        <div id="form-error" class="error-banner" hidden></div>
+      <div id="detail-content" hidden>
+        <div id="detail-card"></div>
 
-        <div class="form-grid">
-          <div class="field"><label>Title</label><input class="input" name="title" required></div>
-          <div class="field"><label id="location-label">Room</label><input class="input" name="location"></div>
-          <div class="field"><label>Time</label><input class="input" type="datetime-local" name="event_time"></div>
-          <div class="field"><label>Notes</label><textarea class="input" name="notes"></textarea></div>
-          <label class="toggle-row">
-            <input type="checkbox" name="accepts_feedback">
-            <span class="toggle-track"><span class="toggle-thumb"></span></span>
-            Accept feedback
-          </label>
-          <div class="form-hint">Room is used for prayer and exec-meeting posts; social and announcement posts use a general location instead.</div>
-          <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Post update</button>
-            <button type="button" id="discard-btn" class="btn btn-secondary">Discard</button>
-          </div>
+        <div class="section-heading" style="margin-top:20px">
+          <div class="label">Feedback</div>
+          <span class="count" id="detail-feedback-count"></span>
         </div>
-      </form>
+        <div id="detail-feedback-list"></div>
+
+        <div id="detail-actionbar" class="detail-actionbar"></div>
+        <div id="detail-hint" class="form-hint" style="margin-top:9px"></div>
+      </div>
     </div>
 
-    <div id="list-skeleton">
-      <div class="skeleton skeleton-line"></div>
-      <div class="skeleton skeleton-line"></div>
-      <div class="skeleton skeleton-line"></div>
-    </div>
-    <div id="events-list"></div>
   </div>
 
 </div>
 
 <script type="module">
-  import { ICON_SPRITE, icon } from "./assets/js/icons.js?v=1";
+  import { ICON_SPRITE, icon } from "./assets/js/icons.js?v=2";
   document.getElementById("icon-sprite").innerHTML = ICON_SPRITE;
   document.querySelector(".plus-icon").innerHTML = icon("i-plus", { size: 16, stroke: 2.75 });
   document.getElementById("new-post-chev").innerHTML = icon("i-chev", { size: 15, stroke: 2.75 });
+  document.querySelector(".back-icon").innerHTML = icon("i-back", { size: 14, stroke: 2.75 });
 </script>
-<script type="module" src="assets/js/exec.js?v=1"></script>
+<script type="module" src="assets/js/exec.js?v=2"></script>
 </body>
 </html>
