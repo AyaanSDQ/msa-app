@@ -136,6 +136,11 @@ textarea.input { min-height: 90px; resize: vertical; border-radius: var(--radius
   display: flex; align-items: center; gap: 8px; margin-bottom: 16px;
 }
 .app-title { font-family: var(--font-heading); font-size: 17px; }
+.exec-link {
+  margin-left: auto; font-size: 12px; color: var(--color-neutral-700);
+  text-decoration: none;
+}
+.exec-link:hover { color: var(--color-accent); }
 
 .section-heading {
   display: flex; align-items: baseline; gap: 8px; margin-bottom: 12px;

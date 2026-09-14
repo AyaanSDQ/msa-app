@@ -79,6 +79,7 @@ function wireLoginForm() {
 
   logoutBtn.addEventListener("click", async () => {
     await supabase.auth.signOut();
+    location.href = "index.html";
   });
 }
 
