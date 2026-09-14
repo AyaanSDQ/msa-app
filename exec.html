@@ -15,6 +15,7 @@
 
   <div id="login-view" class="login-wrap" hidden>
     <div class="login-card">
+      <a href="index.html" class="back-link"><span class="back-icon">BACK_ICON</span>Go back</a>
       <div class="login-title">Exec login</div>
       <div class="login-sub">Accounts are pre-created — no public sign-up.</div>
       <div id="login-error" class="error-banner" hidden></div>
@@ -111,7 +112,7 @@
   document.getElementById("icon-sprite").innerHTML = ICON_SPRITE;
   document.querySelector(".plus-icon").innerHTML = icon("i-plus", { size: 16, stroke: 2.75 });
   document.getElementById("new-post-chev").innerHTML = icon("i-chev", { size: 15, stroke: 2.75 });
-  document.querySelector(".back-icon").innerHTML = icon("i-back", { size: 14, stroke: 2.75 });
+  document.querySelectorAll(".back-icon").forEach((el) => { el.innerHTML = icon("i-back", { size: 14, stroke: 2.75 }); });
 </script>
 <script type="module" src="assets/js/exec.js?v=4"></script>
 </body>
