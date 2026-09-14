@@ -61,7 +61,7 @@ async function init() {
   renderForSession(data.session);
 }
 
-function renderForSession(session) {
+async function renderForSession(session) {
   if (!session) {
     currentUserId = null;
     loginView.hidden = false;
@@ -72,7 +72,13 @@ function renderForSession(session) {
   loginView.hidden = true;
   appView.hidden = false;
   showListView();
-  loadEventsAndHeader();
+  await loadEventsAndHeader();
+
+  // Reload deep-links back into whichever post was open (exec.html#post-<id>)
+  // instead of always dropping back to the list.
+  if (location.hash.startsWith("#post-")) {
+    openDetail(location.hash.slice(6));
+  }
 }
 
 // ── View toggle (list ↔ detail) ─────────────────────────────────────────
@@ -287,6 +293,7 @@ function wireNewPostForm() {
 function wireDetailView() {
   detailBack.addEventListener("click", () => {
     currentDetailUpdate = null;
+    history.replaceState(null, "", location.pathname + location.search);
     showListView();
     loadEventsAndHeader();
   });
@@ -317,6 +324,7 @@ function wireDetailView() {
 }
 
 async function openDetail(updateId) {
+  history.replaceState(null, "", `#post-${updateId}`);
   showDetailView();
   detailSkeleton.hidden = false;
   detailContent.hidden = true;
