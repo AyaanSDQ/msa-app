@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MSA Updates — Exec</title>
+<link rel="stylesheet" href="assets/css/app.css">
+<meta name="theme-color" content="#c67139">
+</head>
+<body>
+
+<div id="icon-sprite"></div>
+
+<div class="app">
+
+  <div id="login-view" class="login-wrap" hidden>
+    <div class="login-card">
+      <div class="login-title">Exec login</div>
+      <div class="login-sub">Accounts are pre-created — no public sign-up.</div>
+      <div id="login-error" class="error-banner" hidden></div>
+      <form id="login-form">
+        <div class="field" style="margin-bottom:11px"><label>Email</label><input class="input" type="email" name="email" required autocomplete="username"></div>
+        <div class="field" style="margin-bottom:16px"><label>Password</label><input class="input" type="password" name="password" required autocomplete="current-password"></div>
+        <button type="submit" id="login-submit" class="btn btn-primary" style="width:100%;border-radius:12px">Log in</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="app-view" hidden>
+    <div class="exec-topbar">
+      <div class="app-title">All events</div>
+      <span class="tag" id="exec-name-tag" style="background:var(--type-social-list);color:var(--type-social-icon);font-size:10px">Exec</span>
+      <button type="button" id="logout-btn" class="logout-link">Log out</button>
+    </div>
+
+    <div class="new-post-box">
+      <button type="button" id="new-post-toggle" class="new-post-toggle">
+        <span class="plus-icon">PLUS_ICON</span>
+        <span class="label">New post</span>
+        <span id="new-post-chev" class="chev collapsed">CHEV_ICON</span>
+      </button>
+
+      <form id="post-form" class="post-form">
+        <div class="type-grid" id="type-grid">
+          <button type="button" class="type-option selected" data-type="prayer">Prayer</button>
+          <button type="button" class="type-option" data-type="social">Social</button>
+          <button type="button" class="type-option" data-type="announcement">Announcement</button>
+          <button type="button" class="type-option" data-type="exec_meeting">Exec meeting</button>
+        </div>
+
+        <div id="form-error" class="error-banner" hidden></div>
+
+        <div class="form-grid">
+          <div class="field"><label>Title</label><input class="input" name="title" required></div>
+          <div class="field"><label id="location-label">Room</label><input class="input" name="location"></div>
+          <div class="field"><label>Time</label><input class="input" type="datetime-local" name="event_time"></div>
+          <div class="field"><label>Notes</label><textarea class="input" name="notes"></textarea></div>
+          <label class="toggle-row">
+            <input type="checkbox" name="accepts_feedback">
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            Accept feedback
+          </label>
+          <div class="form-hint">Room is used for prayer and exec-meeting posts; social and announcement posts use a general location instead.</div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Post update</button>
+            <button type="button" id="discard-btn" class="btn btn-secondary">Discard</button>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <div id="list-skeleton">
+      <div class="skeleton skeleton-line"></div>
+      <div class="skeleton skeleton-line"></div>
+      <div class="skeleton skeleton-line"></div>
+    </div>
+    <div id="events-list"></div>
+  </div>
+
+</div>
+
+<script type="module">
+  import { ICON_SPRITE, icon } from "./assets/js/icons.js";
+  document.getElementById("icon-sprite").innerHTML = ICON_SPRITE;
+  document.querySelector(".plus-icon").innerHTML = icon("i-plus", { size: 16, stroke: 2.75 });
+  document.getElementById("new-post-chev").innerHTML = icon("i-chev", { size: 15, stroke: 2.75 });
+</script>
+<script type="module" src="assets/js/exec.js"></script>
+</body>
+</html>
