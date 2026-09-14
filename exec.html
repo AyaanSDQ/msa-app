@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>MSA Updates — Exec</title>
-<link rel="stylesheet" href="assets/css/app.css">
+<link rel="stylesheet" href="assets/css/app.css?v=1">
 <meta name="theme-color" content="#c67139">
 </head>
 <body>
@@ -80,11 +80,11 @@
 </div>
 
 <script type="module">
-  import { ICON_SPRITE, icon } from "./assets/js/icons.js";
+  import { ICON_SPRITE, icon } from "./assets/js/icons.js?v=1";
   document.getElementById("icon-sprite").innerHTML = ICON_SPRITE;
   document.querySelector(".plus-icon").innerHTML = icon("i-plus", { size: 16, stroke: 2.75 });
   document.getElementById("new-post-chev").innerHTML = icon("i-chev", { size: 15, stroke: 2.75 });
 </script>
-<script type="module" src="assets/js/exec.js"></script>
+<script type="module" src="assets/js/exec.js?v=1"></script>
 </body>
 </html>
