@@ -397,3 +397,34 @@ textarea.input { min-height: 90px; resize: vertical; border-radius: var(--radius
 .btn-cancel-action { border: 1.5px solid var(--color-danger); color: var(--color-danger); background: transparent; }
 .btn-delete-action { background: var(--color-danger); color: #fff; }
 .btn-restore-action { border: 1.5px solid #27506f; color: #27506f; background: transparent; }
+
+/* ══════════════════ Realtime: new-update pill + removal animation ══════════════════ */
+
+.new-update-pill {
+  position: sticky; top: 10px; z-index: 5;
+  display: flex; margin: 0 0 14px; justify-content: center;
+}
+.new-update-pill button {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--color-text); color: var(--color-bg);
+  font-family: var(--font-body); font-size: 12.5px; font-weight: 600;
+  border: 0; border-radius: 999px; padding: 8px 16px; cursor: pointer;
+  box-shadow: var(--shadow-md);
+  animation: pill-in .2s ease;
+}
+.new-update-pill button:hover { opacity: .9; }
+@keyframes pill-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+
+.realtime-removing {
+  overflow: hidden;
+  transition: max-height .35s ease, opacity .3s ease, filter .3s ease, margin .35s ease, padding .35s ease;
+  filter: grayscale(1);
+  opacity: .55;
+}
+.realtime-removing.collapsing {
+  max-height: 0 !important;
+  opacity: 0;
+  margin-top: 0 !important; margin-bottom: 0 !important;
+  padding-top: 0 !important; padding-bottom: 0 !important;
+  border-width: 0 !important;
+}

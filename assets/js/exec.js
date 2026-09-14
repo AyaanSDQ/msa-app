@@ -37,6 +37,8 @@ let selectedType = "prayer";
 let currentUserId = null;
 let currentDetailUpdate = null;
 let currentDetailFeedbackCount = 0;
+let feedbackCounts = new Map(); // update_id -> count, kept for Realtime re-renders
+let execChannel = null;
 
 const ROOM_LABEL_TYPES = new Set(["prayer", "exec_meeting"]);
 
@@ -66,6 +68,7 @@ async function renderForSession(session) {
     currentUserId = null;
     loginView.hidden = false;
     appView.hidden = true;
+    teardownRealtime();
     return;
   }
   currentUserId = session.user.id;
@@ -73,12 +76,50 @@ async function renderForSession(session) {
   appView.hidden = false;
   showListView();
   await loadEventsAndHeader();
+  setupRealtime();
 
   // Reload deep-links back into whichever post was open (exec.html#post-<id>)
   // instead of always dropping back to the list.
   if (location.hash.startsWith("#post-")) {
     openDetail(location.hash.slice(6));
   }
+}
+
+// ── Realtime ─────────────────────────────────────────────────────────────
+// Execs can SELECT every row (no RLS visibility-transition problem like the
+// reader page has), so this just patches or prepends cards directly — no
+// deferral, no animation, matching the exec list's existing "show every
+// status inline" design.
+
+function setupRealtime() {
+  if (execChannel) return;
+  execChannel = supabase
+    .channel("exec-updates")
+    .on("postgres_changes", { event: "*", schema: "public", table: "updates" }, (payload) => {
+      if (payload.new) applyExecRealtimeRow(payload.new);
+    })
+    .subscribe();
+}
+
+function teardownRealtime() {
+  if (!execChannel) return;
+  supabase.removeChannel(execChannel);
+  execChannel = null;
+}
+
+function applyExecRealtimeRow(row) {
+  const count = feedbackCounts.get(row.id) || 0;
+  const html = execCardHtml(row, count);
+  const existingEl = listEl.querySelector(`[data-update-id="${row.id}"]`);
+
+  if (existingEl) {
+    existingEl.outerHTML = html;
+    return;
+  }
+
+  const emptyState = listEl.querySelector(".empty-state");
+  if (emptyState) listEl.innerHTML = "";
+  listEl.insertAdjacentHTML("afterbegin", html);
 }
 
 // ── View toggle (list ↔ detail) ─────────────────────────────────────────
@@ -144,7 +185,7 @@ async function loadEventsAndHeader() {
     return;
   }
 
-  const feedbackCounts = new Map();
+  feedbackCounts = new Map();
   for (const row of feedbackRows || []) {
     feedbackCounts.set(row.update_id, (feedbackCounts.get(row.update_id) || 0) + 1);
   }

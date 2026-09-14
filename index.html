@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>MSA Updates</title>
 <meta name="description" content="Prayer times, locations, and event updates for the MSA.">
-<link rel="stylesheet" href="assets/css/app.css?v=2">
+<link rel="stylesheet" href="assets/css/app.css?v=3">
 <meta name="theme-color" content="#c67139">
 </head>
 <body>
@@ -25,6 +25,9 @@
   </div>
 
   <div id="page" hidden>
+    <div id="new-update-pill" class="new-update-pill" hidden>
+      <button type="button" id="new-update-pill-btn" class="btn">New update — scroll up</button>
+    </div>
     <div id="hero"></div>
 
     <div class="section-heading">
@@ -48,6 +51,6 @@
   import { ICON_SPRITE } from "./assets/js/icons.js?v=1";
   document.getElementById("icon-sprite").innerHTML = ICON_SPRITE;
 </script>
-<script type="module" src="assets/js/reader.js?v=1"></script>
+<script type="module" src="assets/js/reader.js?v=2"></script>
 </body>
 </html>

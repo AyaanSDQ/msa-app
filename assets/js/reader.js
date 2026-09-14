@@ -21,14 +21,28 @@ const loadMoreWrap = document.getElementById("load-more-wrap");
 const loadMoreBtn = document.getElementById("load-more");
 const skeletonEl = document.getElementById("skeleton");
 const pageEl = document.getElementById("page");
+const newUpdatePill = document.getElementById("new-update-pill");
+const newUpdatePillBtn = document.getElementById("new-update-pill-btn");
 
 let execNames = new Map(); // user_id -> display_name
 let historyOffset = 0;
 let historyDone = false;
 
+// Today's active-post set, kept live so Realtime events can recompute the
+// hero (pickHero needs the whole day's set, not just one changed row).
+let todayRows = [];
+let hasDeferredTodayUpdate = false;
+
+// Realtime events can arrive before the initial fetch finishes; buffer them
+// and replay after so nothing is lost and the empty state never shows stale.
+let initialFetchDone = false;
+let preInitEvents = [];
+
 init();
 
 async function init() {
+  setupRealtime();
+
   const [{ data: execs }, firstBatch] = await Promise.all([
     supabase.from("exec_directory").select("user_id, display_name"),
     fetchBatch(0, PAGE_SIZE),
@@ -40,18 +54,24 @@ async function init() {
   historyDone = rows.length < PAGE_SIZE;
 
   const now = new Date();
-  const todayRows = rows.filter((r) => isSameLocalDay(new Date(r.created_at), now));
+  todayRows = rows.filter((r) => isSameLocalDay(new Date(r.created_at), now));
   const historyRows = rows.filter((r) => !isSameLocalDay(new Date(r.created_at), now));
 
-  renderToday(todayRows, now);
+  renderToday(now);
   renderHistoryBatch(historyRows);
   updateLoadMoreVisibility();
 
   skeletonEl.hidden = true;
   pageEl.hidden = false;
 
+  initialFetchDone = true;
+  const buffered = preInitEvents;
+  preInitEvents = [];
+  buffered.forEach(handleRealtimeEvent);
+
   setInterval(refreshRelativeTimestamps, 60_000);
   wireFeedbackDelegation();
+  wireNewUpdatePill();
 
   loadMoreBtn.addEventListener("click", handleLoadMore);
 
@@ -62,6 +82,7 @@ async function fetchBatch(offset, limit) {
   const { data, error } = await supabase
     .from("updates")
     .select("*")
+    .neq("status", "deleted")
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
   if (error) {
@@ -110,7 +131,7 @@ function pickHero(todayRows, now) {
   return byCreated[0];
 }
 
-function renderToday(todayRows, now) {
+function renderToday(now) {
   const hero = pickHero(todayRows, now);
   heroEl.innerHTML = hero ? heroCardHtml(hero) : heroEmptyHtml();
 
@@ -345,4 +366,145 @@ function maybeScrollToAnchor() {
   const id = location.hash.replace("#post-", "");
   const el = document.querySelector(`[data-update-id="${id}"]`);
   if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+// ── Realtime ─────────────────────────────────────────────────────────────
+// Cancelled/deleted transitions apply immediately wherever the affected
+// card is (they're targeted edits to one existing card, not new content
+// pushed in above the reader). New active arrivals are the one case that
+// can reflow content above whatever the reader is currently scrolled past,
+// so those get deferred behind the "New update" pill unless already near
+// the top.
+
+function setupRealtime() {
+  supabase
+    .channel("reader-updates")
+    .on("postgres_changes", { event: "*", schema: "public", table: "updates" }, (payload) => {
+      if (!initialFetchDone) {
+        preInitEvents.push(payload);
+        return;
+      }
+      handleRealtimeEvent(payload);
+    })
+    .subscribe();
+}
+
+function handleRealtimeEvent(payload) {
+  const row = payload.new;
+  if (!row || row.type === "exec_meeting") return; // RLS already blocks this for anon; defensive only
+  if (row.status === "deleted") handleDeleted(row.id);
+  else if (row.status === "cancelled") handleCancelled(row);
+  else if (row.status === "active") handleActiveArrival(row);
+}
+
+function handleActiveArrival(row) {
+  const now = new Date();
+  const isToday = isSameLocalDay(new Date(row.created_at), now);
+
+  if (!isToday) {
+    const el = document.querySelector(`[data-update-id="${row.id}"]`);
+    if (el && historyEl.contains(el)) el.outerHTML = histCardHtml(row);
+    return;
+  }
+
+  const idx = todayRows.findIndex((r) => r.id === row.id);
+  if (idx >= 0) todayRows[idx] = row;
+  else todayRows.push(row);
+
+  if (isScrolledNearTop()) {
+    renderToday(now);
+  } else {
+    hasDeferredTodayUpdate = true;
+    newUpdatePill.hidden = false;
+  }
+}
+
+function handleCancelled(row) {
+  const now = new Date();
+  const isToday = isSameLocalDay(new Date(row.created_at), now);
+
+  if (isToday) {
+    const idx = todayRows.findIndex((r) => r.id === row.id);
+    if (idx < 0) return; // not part of the currently-loaded today set
+    const wasHero = pickHero(todayRows, now)?.id === row.id;
+    todayRows[idx] = row;
+
+    if (wasHero) {
+      renderToday(now);
+    } else {
+      const el = document.querySelector(`[data-update-id="${row.id}"]`);
+      if (el) el.outerHTML = listCardHtml(row);
+    }
+    return;
+  }
+
+  const el = document.querySelector(`[data-update-id="${row.id}"]`);
+  if (el) el.outerHTML = histCardHtml(row);
+}
+
+function handleDeleted(id) {
+  const el = document.querySelector(`[data-update-id="${id}"]`);
+  const todayIdx = todayRows.findIndex((r) => r.id === id);
+
+  if (!el) {
+    if (todayIdx >= 0) todayRows.splice(todayIdx, 1);
+    return;
+  }
+
+  const wasHero = todayIdx >= 0 && pickHero(todayRows, new Date())?.id === id;
+
+  animateRemove(el, () => {
+    const idx = todayRows.findIndex((r) => r.id === id);
+    if (idx >= 0) todayRows.splice(idx, 1);
+
+    if (wasHero) {
+      renderToday(new Date());
+    } else if (todayIdx >= 0) {
+      const heroNow = pickHero(todayRows, new Date());
+      const rest = todayRows.filter((r) => r !== heroNow);
+      todayCountEl.textContent = String(rest.length);
+      if (rest.length === 0) {
+        todayEl.innerHTML = emptyStateHtml("No other updates posted yet for today");
+      }
+    }
+  });
+}
+
+function animateRemove(el, onDone) {
+  const height = el.getBoundingClientRect().height;
+  el.style.maxHeight = `${height}px`;
+  el.classList.add("realtime-removing");
+  void el.offsetHeight; // force reflow so the max-height transition actually animates
+  requestAnimationFrame(() => el.classList.add("collapsing"));
+
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    el.remove();
+    onDone?.();
+  };
+  el.addEventListener("transitionend", finish, { once: true });
+  setTimeout(finish, 500); // fallback in case transitionend doesn't fire
+}
+
+function isScrolledNearTop() {
+  return (document.documentElement.scrollTop || document.body.scrollTop) <= 40;
+}
+
+function wireNewUpdatePill() {
+  newUpdatePillBtn.addEventListener("click", () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    applyDeferredToday();
+  });
+  window.addEventListener("scroll", () => {
+    if (hasDeferredTodayUpdate && isScrolledNearTop()) applyDeferredToday();
+  });
+}
+
+function applyDeferredToday() {
+  if (!hasDeferredTodayUpdate) return;
+  hasDeferredTodayUpdate = false;
+  newUpdatePill.hidden = true;
+  renderToday(new Date());
 }
