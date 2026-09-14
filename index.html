@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MSA Updates</title>
+<meta name="description" content="Prayer times, locations, and event updates for the MSA.">
+<link rel="stylesheet" href="assets/css/app.css">
+<meta name="theme-color" content="#c67139">
+</head>
+<body>
+
+<div id="icon-sprite"></div>
+
+<div class="app">
+  <header class="app-header">
+    <div class="app-title">MSA Updates</div>
+  </header>
+
+  <div id="skeleton">
+    <div class="skeleton skeleton-hero"></div>
+    <div class="skeleton skeleton-line"></div>
+    <div class="skeleton skeleton-line"></div>
+  </div>
+
+  <div id="page" hidden>
+    <div id="hero"></div>
+
+    <div class="section-heading">
+      <div class="label">Today's other posts</div>
+      <span class="count" id="today-count">0</span>
+    </div>
+    <div id="today-posts"></div>
+
+    <div class="divider"></div>
+
+    <div class="section-heading"><div class="label">History</div></div>
+    <div id="history"></div>
+
+    <div id="load-more-wrap" hidden>
+      <button type="button" id="load-more" class="btn load-more">Load more</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { ICON_SPRITE } from "./assets/js/icons.js";
+  document.getElementById("icon-sprite").innerHTML = ICON_SPRITE;
+</script>
+<script type="module" src="assets/js/reader.js"></script>
+</body>
+</html>
