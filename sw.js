@@ -1,11 +1,15 @@
-// App-shell service worker. Deliberately simple and self-contained (single
-// file, one cache, no build step) so step 6 (OneSignal) can coexist via
-// importScripts('OneSignalSDKWorker.js') or a merged fetch handler without
-// this needing a rewrite.
-//
+// App-shell service worker, merged with OneSignal's push worker per their
+// documented "existing service worker" coexistence pattern: importScripts
+// loads OneSignal's install/activate/push/notificationclick listeners into
+// this same worker (addEventListener supports multiple listeners per event,
+// so neither side overrides the other). The client points OneSignal at this
+// exact file via serviceWorkerPath: "sw.js" instead of its own default
+// OneSignalSDKWorker.js, so there's only ever one registration/scope.
+importScripts("https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js");
+
 // Bump CACHE_NAME whenever the precache list below changes, so the old
 // cache gets cleaned up on activate instead of accumulating stale entries.
-const CACHE_NAME = "msa-shell-v1";
+const CACHE_NAME = "msa-shell-v2";
 
 const PRECACHE_URLS = [
   "index.html",
@@ -15,8 +19,9 @@ const PRECACHE_URLS = [
   "assets/js/reader.js?v=2",
   "assets/js/exec.js?v=4",
   "assets/js/install.js?v=1",
+  "assets/js/notify.js?v=1",
   "assets/js/sw-register.js?v=1",
-  "assets/js/icons.js?v=3",
+  "assets/js/icons.js?v=4",
   "assets/js/shared.js",
   "assets/js/config.js",
   "assets/js/supabase-client.js",
@@ -34,7 +39,12 @@ self.addEventListener("install", (event) => {
       // entry in PRECACHE_URLS (e.g. after forgetting to bump a ?v= here)
       // would otherwise fail the whole install and skipWaiting() never runs.
       .then((cache) => Promise.allSettled(PRECACHE_URLS.map((url) => cache.add(url))))
-      .then(() => self.skipWaiting())
+      .then((results) => {
+        results.forEach((r, i) => {
+          if (r.status === "rejected") console.error("[sw] precache failed:", PRECACHE_URLS[i], r.reason);
+        });
+        return self.skipWaiting();
+      })
   );
 });
 

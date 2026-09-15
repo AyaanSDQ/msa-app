@@ -25,6 +25,7 @@
   </header>
 
   <div id="install-banner" class="install-banner" hidden></div>
+  <div id="notify-banner" class="install-banner" hidden></div>
 
   <div id="skeleton">
     <div class="skeleton skeleton-hero"></div>
@@ -56,11 +57,13 @@
 </div>
 
 <script type="module">
-  import { ICON_SPRITE } from "./assets/js/icons.js?v=3";
+  import { ICON_SPRITE } from "./assets/js/icons.js?v=4";
   document.getElementById("icon-sprite").innerHTML = ICON_SPRITE;
 </script>
 <script type="module" src="assets/js/reader.js?v=2"></script>
 <script type="module" src="assets/js/install.js?v=1"></script>
 <script src="assets/js/sw-register.js?v=1"></script>
+<script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+<script type="module" src="assets/js/notify.js?v=1"></script>
 </body>
 </html>
