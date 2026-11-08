@@ -4,7 +4,7 @@
 
 # Ummah
 
-**Prayers, events and announcements for the North Creek High School Muslim Students Association.**
+**A simple, beautiful app for any Muslim Students Association: prayers, events and announcements in one place.**
 
 A fast, phone-first web app. Install it to your home screen, get a push when something new is posted, and check the calendar in two taps.
 
@@ -14,6 +14,12 @@ A fast, phone-first web app. Install it to your home screen, get a push when som
 ![Push](https://img.shields.io/badge/push-OneSignal-e54b4d?style=flat-square)
 
 </div>
+
+<p align="center">
+  <img src="docs/screenshots/updates.jpg" alt="Updates feed with a featured announcement" width="270">
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/calendar.jpg" alt="Calendar with three events on one day" width="270">
+</p>
 
 ---
 
@@ -59,6 +65,15 @@ supabase/
   ADMIN-ACCOUNTS.md  How to create officer logins
 design/           Design spec
 ```
+
+## Make it yours
+
+Ummah is built to be reused by any MSA. To brand it for your school or chapter:
+
+- Change the name and colors: edit the `--brand` tokens at the top of `assets/css/app.css`, the strings in the HTML pages, and `manifest.json`.
+- Swap the logo and icons in `assets/icons/`.
+- Update the contact details and legal text in `privacy.html` and `terms.html`.
+- Point `assets/js/config.js` at your own Supabase project.
 
 ## Run it locally
 
