@@ -1,4 +1,4 @@
-import { icon } from "./icons.js";
+import { icon } from "./icons.js?v=9";
 
 // Per-type presentation, matching design-reference §15 accent table.
 export const TYPE_META = {
@@ -40,6 +40,12 @@ export function formatDateHeading(date) {
   return `${weekday} · ${month} ${date.getDate()}`;
 }
 
+// "Sun, Nov 15" — the actual date of an event.
+export function formatEventDate(ts) {
+  if (!ts) return "";
+  return new Date(ts).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+}
+
 export function isSameLocalDay(a, b) {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
@@ -61,10 +67,18 @@ export function formatRelative(ts) {
   return `Updated ${diffDay} day${diffDay === 1 ? "" : "s"} ago`;
 }
 
-export function attributionName(update) {
-  return update.executive_display_name || "an exec";
-}
-
 export function cancelledBanner() {
   return `<div class="cancelled-banner">${icon("i-ban", { size: 14, stroke: 2.4 })}Cancelled</div>`;
+}
+
+// ── Room labels ──────────────────────────────────────────────────────────
+// Rooms starting with 1, 2 or 3 are in Building 1, 2 or 3.
+export function buildingFor(location) {
+  const m = /^\s*([123])\d{2,3}\b/.exec(location || "");
+  return m ? Number(m[1]) : null;
+}
+
+export function roomLabel(location) {
+  const b = buildingFor(location);
+  return b ? `${location} · Building ${b}` : location;
 }

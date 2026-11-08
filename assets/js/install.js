@@ -1,4 +1,4 @@
-import { icon } from "./icons.js";
+import { icon } from "./icons.js?v=9";
 
 const DISMISS_KEY = "msa-install-dismissed";
 
@@ -38,7 +38,7 @@ function initInstallBanner(banner) {
     show(`
       ${icon("i-download", { size: 20, stroke: 2.5 })}
       <div class="install-copy">
-        <div class="install-title">Install MSA Updates</div>
+        <div class="install-title">Install Ummah</div>
         <div class="install-sub">Quick access from your home screen, plus notifications for last-minute changes.</div>
       </div>
       <button type="button" class="btn btn-primary" id="install-action">Install</button>
@@ -56,7 +56,7 @@ function initInstallBanner(banner) {
     show(`
       ${icon("i-share", { size: 20, stroke: 2.5 })}
       <div class="install-copy">
-        <div class="install-title">Install MSA Updates</div>
+        <div class="install-title">Install Ummah</div>
         <div class="install-sub">
           <ol class="install-steps">
             <li>Tap ${icon("i-share", { size: 14, stroke: 2.75 })} <b>Share</b> in Safari's toolbar</li>

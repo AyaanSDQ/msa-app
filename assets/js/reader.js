@@ -1,16 +1,18 @@
 import { supabase } from "./supabase-client.js";
-import { icon } from "./icons.js";
+import { icon } from "./icons.js?v=9";
 import {
   TYPE_META,
   typeBanner,
   escapeHtml,
   formatTime,
+  formatEventDate,
   formatDateHeading,
   isSameLocalDay,
   localDateKey,
   formatRelative,
   cancelledBanner,
-} from "./shared.js";
+  roomLabel,
+} from "./shared.js?v=18";
 
 const PAGE_SIZE = 20;
 const heroEl = document.getElementById("hero");
@@ -24,7 +26,6 @@ const pageEl = document.getElementById("page");
 const newUpdatePill = document.getElementById("new-update-pill");
 const newUpdatePillBtn = document.getElementById("new-update-pill-btn");
 
-let execNames = new Map(); // user_id -> display_name
 let historyOffset = 0;
 let historyDone = false;
 
@@ -43,13 +44,7 @@ init();
 async function init() {
   setupRealtime();
 
-  const [{ data: execs }, firstBatch] = await Promise.all([
-    supabase.from("exec_directory").select("user_id, display_name"),
-    fetchBatch(0, PAGE_SIZE),
-  ]);
-  execNames = new Map((execs || []).map((e) => [e.user_id, e.display_name]));
-
-  const rows = firstBatch;
+  const rows = await fetchBatch(0, PAGE_SIZE);
   historyOffset = rows.length;
   historyDone = rows.length < PAGE_SIZE;
 
@@ -177,20 +172,18 @@ function renderHistoryBatch(rows, { append = false } = {}) {
 function heroCardHtml(update) {
   const meta = TYPE_META[update.type];
   return `
-  <div class="hero-card" style="background:var(--type-${update.type}-hero)" data-update-id="${update.id}">
+  <div class="hero-card" style="--c:var(--type-${update.type}-hero)" data-update-id="${update.id}">
     <div class="hero-banner" style="background:var(--type-${update.type}-banner);color:var(--type-${update.type}-hero)">${typeBanner(update.type)}</div>
     <div class="hero-body">
-      <div class="hero-top">
-        <div class="hero-icon">${icon(meta.iconId, { size: 22 })}</div>
-        <div>
-          <div class="hero-kicker" style="color:var(--type-${update.type}-chip)">${meta.label}${update.status === "cancelled" ? " · cancelled" : " · up next"}</div>
-          <div class="hero-title">${escapeHtml(update.title)}</div>
-        </div>
+      <div class="hero-eyebrow">
+        <span class="hero-type">${meta.label}</span>
+        ${update.status === "cancelled" ? `<span class="hero-status">Cancelled</span>` : ""}
       </div>
+      <div class="hero-title">${escapeHtml(update.title)}</div>
       ${chipsHtml(update)}
       ${update.body ? `<p class="hero-notes">${escapeHtml(update.body)}</p>` : ""}
       <div class="hero-footer" data-updated-at="${update.created_at}">
-        <span class="updated-text">${formatRelative(update.created_at)} · ${escapeHtml(attributionFor(update))}</span>
+        <span class="updated-text">${formatRelative(update.created_at)}</span>
         ${feedbackToggleHtml(update)}
       </div>
       ${feedbackRowHtml(update)}
@@ -204,8 +197,11 @@ function heroEmptyHtml() {
 
 function chipsHtml(update) {
   const chips = [];
-  if (update.event_time) chips.push(`<span class="chip">${icon("i-clock", { size: 13, stroke: 2.75 })}${formatTime(update.event_time)}</span>`);
-  if (update.location) chips.push(`<span class="chip">${icon("i-pin", { size: 13, stroke: 2.75 })}${escapeHtml(update.location)}</span>`);
+  if (update.event_time) {
+    chips.push(`<span class="chip">${icon("i-calendar", { size: 14 })}${formatEventDate(update.event_time)}</span>`);
+    chips.push(`<span class="chip">${icon("i-clock", { size: 14 })}${formatTime(update.event_time)}</span>`);
+  }
+  if (update.location) chips.push(`<span class="chip">${icon("i-pin", { size: 13, stroke: 2.75 })}${escapeHtml(roomLabel(update.location))}</span>`);
   return chips.length ? `<div class="hero-chips">${chips.join("")}</div>` : "";
 }
 
@@ -219,7 +215,7 @@ function listCardHtml(update) {
       <div class="list-meta">${metaLine(update)}</div>
       ${update.body ? `<p class="list-notes">${escapeHtml(update.body)}</p>` : ""}
       <div class="list-updated" data-updated-at="${update.created_at}">
-        <span class="updated-text">${formatRelative(update.created_at)} · ${escapeHtml(attributionFor(update))}</span>
+        <span class="updated-text">${formatRelative(update.created_at)}</span>
       </div>
       ${feedbackRowHtml(update)}
     </div>`;
@@ -239,7 +235,7 @@ function histCardHtml(update) {
       <div class="hist-icon" style="color:var(--type-${update.type}-icon)">${icon(meta.iconId, { size: 16 })}</div>
       <div class="list-body">
         <div class="hist-title">${escapeHtml(update.title)}</div>
-        <div class="hist-meta">${metaLine(update)} · ${escapeHtml(attributionFor(update))}</div>
+        <div class="hist-meta">${metaLine(update)}</div>
       </div>
       ${feedbackToggleHtml(update)}
     </div>
@@ -252,13 +248,9 @@ function histCardHtml(update) {
 
 function metaLine(update) {
   const parts = [];
-  if (update.event_time) parts.push(formatTime(update.event_time));
-  if (update.location) parts.push(escapeHtml(update.location));
+  if (update.event_time) parts.push(formatEventDate(update.event_time), formatTime(update.event_time));
+  if (update.location) parts.push(escapeHtml(roomLabel(update.location)));
   return parts.join(" · ");
-}
-
-function attributionFor(update) {
-  return execNames.get(update.posted_by) || "an exec";
 }
 
 function emptyStateHtml(text) {

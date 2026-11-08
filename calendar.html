@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Calendar — Ummah</title>
+<meta name="description" content="Month view of the MSA's events and announcements.">
+<link rel="stylesheet" href="assets/css/app.css?v=64">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/svg+xml" href="assets/icons/logo.svg">
+<link rel="icon" href="assets/icons/icon-192.png">
+<meta name="theme-color" content="#5b2e91">
+</head>
+<body>
+
+<div id="icon-sprite"></div>
+
+<div class="app app-wide">
+  <header class="app-header">
+    <div class="app-title" aria-label="NCHS MSA, Ummah"><span class="app-name">Ummah</span><span class="app-org"><span>NCHS</span><span>MSA</span></span></div>
+  </header>
+
+  <nav class="tabs" aria-label="Sections">
+    <a href="index.html" class="tab">Updates</a>
+    <a href="calendar.html" class="tab" aria-current="page">Calendar</a>
+  </nav>
+
+  <main id="calendar" class="calendar" aria-live="polite"></main>
+
+  <footer class="app-footer">
+    <nav class="footer-links" aria-label="Footer">
+      <a href="privacy.html">Privacy Policy</a>
+      <a href="terms.html">Terms of Use</a>
+      <a href="exec.html">Administrative login</a>
+    </nav>
+    <p class="footer-note">No ads and no analytics. Feedback is anonymous.</p>
+    <p class="footer-copy">&copy; 2026 Ummah</p>
+  </footer>
+</div>
+
+<script type="module">
+  import { ICON_SPRITE } from "./assets/js/icons.js?v=9";
+  document.getElementById("icon-sprite").innerHTML = ICON_SPRITE;
+</script>
+<script type="module" src="assets/js/calendar.js?v=13"></script>
+<script src="assets/js/fx.js?v=1" defer></script>
+<script src="assets/js/sw-register.js?v=1"></script>
+</body>
+</html>
