@@ -8,6 +8,7 @@
 
 A fast, phone-first web app. Install it to your home screen, get a push when something new is posted, and check the calendar in two taps.
 
+![License: MIT](https://img.shields.io/badge/license-MIT-5b2e91?style=flat-square)
 ![PWA](https://img.shields.io/badge/PWA-installable-5b2e91?style=flat-square)
 ![Static site](https://img.shields.io/badge/stack-HTML%20%C2%B7%20CSS%20%C2%B7%20JS-7a49b8?style=flat-square)
 ![Supabase](https://img.shields.io/badge/backend-Supabase-3ecf8e?style=flat-square)
@@ -104,6 +105,10 @@ Purple (`#5b2e91`) on a very light lilac page, frosted-glass surfaces, and Islam
 ## Privacy
 
 The app collects no personal data from readers. Feedback is anonymous. See the [Privacy Policy](privacy.html) and [Terms of Use](terms.html).
+
+## License
+
+Released under the [MIT License](LICENSE). Use it, change it, and share it with your own MSA.
 
 ---
 
