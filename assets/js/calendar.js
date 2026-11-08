@@ -1,6 +1,6 @@
 import { supabase } from "./supabase-client.js";
-import { icon } from "./icons.js?v=9";
-import { TYPE_META, escapeHtml, formatTime, roomLabel } from "./shared.js?v=18";
+import { icon } from "./icons.js?v=10";
+import { TYPE_META, escapeHtml, formatTime, roomLabel, emptyCardHtml } from "./shared.js?v=21";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -146,7 +146,7 @@ function dayPanel(byDay) {
     ? `<div class="skeleton skeleton-line"></div>`
     : events.length
       ? events.map(eventCard).join("")
-      : `<div class="empty-state">${icon("i-inbox", { size: 22 })}<div class="title">Nothing scheduled for this day</div></div>${nextEventHint(byDay)}`;
+      : `${emptyCardHtml("calendar", "Nothing planned", "A quiet day. Pick another date, or jump to what's next.", { compact: true })}${nextEventHint(byDay)}`;
   return `<section class="cal-panel">
     <div class="cal-panel-head">
       <div class="cal-panel-title">${escapeHtml(title)}${isToday ? ` <span class="today-tag">Today</span>` : ""}</div>
@@ -165,7 +165,7 @@ function monthPanel(byDay) {
   const count = loading ? "" : total ? `${total} event${total === 1 ? "" : "s"}` : "No events";
   let body;
   if (loading) body = `<div class="skeleton skeleton-line"></div>`;
-  else if (!days.length) body = `<div class="empty-state">${icon("i-inbox", { size: 22 })}<div class="title">Nothing scheduled in ${MONTHS[viewMonth]}</div></div>`;
+  else if (!days.length) body = emptyCardHtml("calendar", `Nothing in ${MONTHS[viewMonth]} yet`, "New events show up here as soon as they're posted.", { compact: true });
   else body = days.map(({ date, list }) => {
     const label = date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
     return `<div class="cal-panel-label">${escapeHtml(label)}</div>${list.map(eventCard).join("")}`;
@@ -187,7 +187,7 @@ function agendaHtml(byDay) {
     .map(([k, list]) => { const [y, m, d] = k.split("-").map(Number); return { date: new Date(y, m, d), list }; })
     .sort((a, b) => a.date - b.date);
   if (!days.length) {
-    return `${legendHtml()}<div class="empty-state">${icon("i-inbox", { size: 22, stroke: 2.75 })}<div class="title">Nothing scheduled in ${MONTHS[viewMonth]}</div></div>`;
+    return `${legendHtml()}${emptyCardHtml("calendar", `Nothing in ${MONTHS[viewMonth]} yet`, "New events show up here as soon as they're posted.", { compact: true })}`;
   }
   return `${legendHtml()}${days.map(({ date, list }) => {
     const isToday = sameDay(date, today);

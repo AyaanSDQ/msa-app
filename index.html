@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ummah</title>
 <meta name="description" content="Updates, room numbers and events.">
-<link rel="stylesheet" href="assets/css/app.css?v=64">
+<link rel="stylesheet" href="assets/css/app.css?v=71">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/svg+xml" href="assets/icons/logo.svg">
 <link rel="icon" href="assets/icons/icon-192.png">
@@ -20,8 +20,13 @@
 <div id="icon-sprite"></div>
 
 <div class="app">
-  <header class="app-header">
+  <header class="app-header masthead">
     <div class="app-title" aria-label="NCHS MSA, Ummah"><span class="app-name">Ummah</span><span class="app-org"><span>NCHS</span><span>MSA</span></span></div>
+    <div class="stats" id="stats" aria-label="Community at a glance">
+      <div class="stat"><span class="stat-num" id="stat-announcements">&ndash;</span><span class="stat-label">Announcements</span></div>
+      <div class="stat"><span class="stat-num" id="stat-events">&ndash;</span><span class="stat-label">Upcoming events</span></div>
+      <div class="stat"><span class="stat-num" id="stat-week">&ndash;</span><span class="stat-label">New this week</span></div>
+    </div>
   </header>
 
   <nav class="tabs" aria-label="Sections">
@@ -44,20 +49,21 @@
     </div>
     <div id="hero"></div>
 
-    <div class="section-heading">
-      <div class="label">Today's other posts</div>
-      <span class="count" id="today-count">0</span>
-    </div>
-    <div id="today-posts"></div>
+    <section id="today-section" class="feed-section" hidden>
+      <div class="section-heading">
+        <div class="label">More today</div>
+        <span class="count" id="today-count">0</span>
+      </div>
+      <div id="today-posts"></div>
+    </section>
 
-    <div class="divider"></div>
-
-    <div class="section-heading"><div class="label">History</div></div>
-    <div id="history"></div>
-
-    <div id="load-more-wrap" hidden>
-      <button type="button" id="load-more" class="btn load-more">Load more</button>
-    </div>
+    <section id="history-section" class="feed-section" hidden>
+      <div class="section-heading"><div class="label">Earlier</div></div>
+      <div id="history"></div>
+      <div id="load-more-wrap" hidden>
+        <button type="button" id="load-more" class="btn load-more">Load more</button>
+      </div>
+    </section>
   </div>
 
   <footer class="app-footer">
@@ -72,10 +78,10 @@
 </div>
 
 <script type="module">
-  import { ICON_SPRITE } from "./assets/js/icons.js?v=9";
+  import { ICON_SPRITE } from "./assets/js/icons.js?v=10";
   document.getElementById("icon-sprite").innerHTML = ICON_SPRITE;
 </script>
-<script type="module" src="assets/js/reader.js?v=23"></script>
+<script type="module" src="assets/js/reader.js?v=26"></script>
 <script type="module" src="assets/js/install.js?v=8"></script>
 <script src="assets/js/fx.js?v=1" defer></script>
 <script src="assets/js/sw-register.js?v=1"></script>

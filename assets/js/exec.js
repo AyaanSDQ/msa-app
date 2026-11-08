@@ -1,6 +1,6 @@
 import { supabase } from "./supabase-client.js";
-import { icon } from "./icons.js?v=9";
-import { TYPE_META, typeBanner, escapeHtml, formatTime, formatDateHeading, formatEventDate, localDateKey, roomLabel } from "./shared.js?v=18";
+import { icon } from "./icons.js?v=10";
+import { TYPE_META, typeBanner, escapeHtml, formatTime, formatDateHeading, formatEventDate, localDateKey, roomLabel } from "./shared.js?v=21";
 
 const loginView = document.getElementById("login-view");
 const appView = document.getElementById("app-view");
@@ -297,7 +297,7 @@ function wireNewPostForm() {
       return;
     }
 
-    const { error } = await supabase.from("updates").insert({
+    const payload = {
       type: selectedType,
       title,
       location: location || null,
@@ -305,13 +305,26 @@ function wireNewPostForm() {
       body: body || null,
       accepts_feedback: acceptsFeedback,
       posted_by: currentUserId,
-    });
+    };
+    // Optional presentation fields are only sent when used, so posting still
+    // works before the matching database migration has been applied.
+    const imageUrl = postForm.image_url.value.trim();
+    const priority = postForm.priority.value;
+    const pinned = postForm.pinned.checked;
+    const usesExtras = !!imageUrl || priority !== "normal" || pinned;
+    if (imageUrl) payload.image_url = imageUrl;
+    if (priority !== "normal") payload.priority = priority;
+    if (pinned) payload.pinned = true;
+
+    const { error } = await supabase.from("updates").insert(payload);
 
     submitBtn.disabled = false;
 
     if (error) {
       console.error("Post failed", error);
-      formError.textContent = "Couldn't post — check the required fields and try again.";
+      formError.textContent = usesExtras
+        ? "Couldn't post. If you used an image, priority or pin, make sure the latest database migration has been applied."
+        : "Couldn't post — check the required fields and try again.";
       formError.hidden = false;
       return;
     }
