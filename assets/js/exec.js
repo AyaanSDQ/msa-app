@@ -42,6 +42,13 @@ let execChannel = null;
 
 const ROOM_LABEL_TYPES = new Set(["prayer", "exec_meeting"]);
 
+// Supabase Auth only knows emails, so a username is stored as the synthetic,
+// never-delivered address <username>@msaapp.local. Accounts must be created
+// (or renamed) with that exact form for this login to find them.
+const USERNAME_EMAIL_DOMAIN = "msaapp.local";
+const USERNAME_PATTERN = /^[a-z0-9._-]{3,32}$/;
+const usernameToEmail = (username) => `${username}@${USERNAME_EMAIL_DOMAIN}`;
+
 init();
 
 async function init() {
@@ -143,14 +150,23 @@ function wireLoginForm() {
     loginSubmit.disabled = true;
     loginSubmit.textContent = "Logging in…";
 
-    const email = loginForm.email.value.trim();
+    const username = loginForm.username.value.trim().toLowerCase();
     const password = loginForm.password.value;
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+
+    if (!USERNAME_PATTERN.test(username)) {
+      loginSubmit.disabled = false;
+      loginSubmit.textContent = "Log in";
+      loginError.textContent = "Usernames are 3–32 characters: letters, numbers, dots, dashes, underscores.";
+      loginError.hidden = false;
+      return;
+    }
+
+    const { error } = await supabase.auth.signInWithPassword({ email: usernameToEmail(username), password });
 
     loginSubmit.disabled = false;
     loginSubmit.textContent = "Log in";
     if (error) {
-      loginError.textContent = "Login failed — check your email and password.";
+      loginError.textContent = "Login failed — check your username and password.";
       loginError.hidden = false;
       return;
     }
