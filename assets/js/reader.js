@@ -27,7 +27,6 @@ const todayCountEl = document.getElementById("today-count");
 const historyEl = document.getElementById("history");
 const todaySection = document.getElementById("today-section");
 const historySection = document.getElementById("history-section");
-const statsEl = document.getElementById("stats");
 const loadMoreWrap = document.getElementById("load-more-wrap");
 const loadMoreBtn = document.getElementById("load-more");
 const skeletonEl = document.getElementById("skeleton");
@@ -65,7 +64,6 @@ async function init() {
   renderHistoryBatch(historyRows);
   renderToday(now);
   updateLoadMoreVisibility();
-  loadStats();
 
   skeletonEl.hidden = true;
   pageEl.hidden = false;
@@ -436,7 +434,6 @@ function setupRealtime() {
 }
 
 function handleRealtimeEvent(payload) {
-  scheduleStats();
   const row = payload.new;
   if (!row || row.type === "exec_meeting") return; // RLS already blocks this for anon; defensive only
   if (row.status === "deleted") handleDeleted(row.id);
@@ -507,7 +504,6 @@ function handleDeleted(id) {
     if (todayIdx >= 0) renderToday(new Date());
     historyCount = historyEl.querySelectorAll(".hist-card").length;
     syncEmptyState();
-    scheduleStats();
   });
 }
 
@@ -548,39 +544,4 @@ function applyDeferredToday() {
   hasDeferredTodayUpdate = false;
   newUpdatePill.hidden = true;
   renderToday(new Date());
-}
-
-// ── Masthead stats ───────────────────────────────────────────────────────
-
-let statsTimer = null;
-function scheduleStats() {
-  clearTimeout(statsTimer);
-  statsTimer = setTimeout(loadStats, 800);
-}
-
-async function loadStats() {
-  if (!statsEl) return;
-  const count = async (query) => {
-    const { count, error } = await query;
-    return error ? null : count;
-  };
-  const head = () => supabase.from("updates").select("id", { count: "exact", head: true });
-  const nowIso = new Date().toISOString();
-  const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString();
-  const [announcements, events, week] = await Promise.all([
-    count(head().eq("type", "announcement").eq("status", "active")),
-    count(head().eq("status", "active").gte("event_time", nowIso)),
-    count(head().neq("status", "deleted").gte("created_at", weekAgo)),
-  ]);
-  if (announcements === null && events === null && week === null) {
-    statsEl.hidden = true;
-    return;
-  }
-  const set = (id, value) => {
-    const el = document.getElementById(id);
-    if (el && value !== null) el.textContent = String(value);
-  };
-  set("stat-announcements", announcements);
-  set("stat-events", events);
-  set("stat-week", week);
 }
