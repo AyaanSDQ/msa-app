@@ -5,27 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Calendar — Ummah</title>
 <meta name="description" content="Month view of the MSA's events and announcements.">
-<link rel="stylesheet" href="assets/css/app.css?v=76">
+<link rel="stylesheet" href="assets/css/app.css?v=94">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/svg+xml" href="assets/icons/logo.svg">
 <link rel="icon" href="assets/icons/icon-192.png">
 <meta name="theme-color" content="#5b2e91">
 </head>
-<body>
+<body class="page-calendar">
 
 <div id="icon-sprite"></div>
 
-<div class="app app-wide">
-  <header class="app-header masthead masthead-slim">
+<div class="app">
+  <header class="app-header masthead">
     <div class="app-title" aria-label="Ummah"><span class="app-name">Ummah</span></div>
   </header>
 
-  <nav class="tabs" aria-label="Sections">
-    <a href="index.html" class="tab">Updates</a>
-    <a href="calendar.html" class="tab" aria-current="page">Calendar</a>
-  </nav>
-
   <main id="calendar" class="calendar" aria-live="polite"></main>
+
 
   <footer class="app-footer">
     <nav class="footer-links" aria-label="Footer">
@@ -33,17 +29,22 @@
       <a href="terms.html">Terms of Use</a>
       <a href="exec.html">Administrative login</a>
     </nav>
-    <p class="footer-note">No ads and no analytics.</p>
+    <p class="footer-note">Made by students, for our community.</p>
     <p class="footer-copy">&copy; 2026 Ummah</p>
   </footer>
+
+  <nav class="bnav" aria-label="Sections">
+    <a href="index.html" class="bnav-item"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-mega"></use></svg><span>Updates</span></a>
+    <a href="calendar.html" class="bnav-item" aria-current="page"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-calendar"></use></svg><span>Calendar</span></a>
+  </nav>
 </div>
 
 <script type="module">
-  import { ICON_SPRITE } from "./assets/js/icons.js?v=10";
+  import { ICON_SPRITE } from "./assets/js/icons.js?v=11";
   document.getElementById("icon-sprite").innerHTML = ICON_SPRITE;
 </script>
-<script type="module" src="assets/js/calendar.js?v=18"></script>
-<script src="assets/js/fx.js?v=1" defer></script>
+<script type="module" src="assets/js/calendar.js?v=21"></script>
+<script src="assets/js/fx.js?v=3" defer></script>
 <script src="assets/js/sw-register.js?v=1"></script>
 </body>
 </html>

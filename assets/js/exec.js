@@ -1,5 +1,5 @@
 import { supabase } from "./supabase-client.js";
-import { icon } from "./icons.js?v=10";
+import { icon } from "./icons.js?v=11";
 import { TYPE_META, typeBanner, escapeHtml, formatTime, formatDateHeading, formatEventDate, localDateKey, roomLabel } from "./shared.js?v=21";
 
 const loginView = document.getElementById("login-view");

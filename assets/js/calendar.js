@@ -1,9 +1,9 @@
 import { supabase } from "./supabase-client.js";
-import { icon } from "./icons.js?v=10";
+import { icon } from "./icons.js?v=11";
 import { TYPE_META, escapeHtml, formatTime, roomLabel, emptyCardHtml } from "./shared.js?v=21";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
 const CHIPS_PER_DAY = 2;
 
 const root = document.getElementById("calendar");
@@ -81,10 +81,6 @@ function render() {
   const byDay = eventsByDay();
   root.innerHTML = `
     ${headHtml()}
-    <div class="seg" role="tablist" aria-label="Calendar view">
-      <button type="button" role="tab" class="seg-btn" data-view="month" aria-selected="${view === "month"}">Month</button>
-      <button type="button" role="tab" class="seg-btn" data-view="agenda" aria-selected="${view === "agenda"}">Agenda</button>
-    </div>
     ${view === "month" ? monthHtml(byDay) : agendaHtml(byDay)}
   `;
   if (slide) {
@@ -94,13 +90,15 @@ function render() {
 }
 
 function headHtml() {
-  const isThisMonth = viewYear === today.getFullYear() && viewMonth === today.getMonth();
+  const other = view === "month" ? "agenda" : "month";
+  const viewIcon = view === "month" ? "i-list" : "i-calendar";
+  const viewLabel = view === "month" ? "Show agenda" : "Show month";
   return `<div class="cal-head">
-      <div class="cal-month">${MONTHS[viewMonth]} <span>${viewYear}</span></div>
+      <div class="cal-month"><span class="cal-year">${viewYear}</span><span class="cal-name">${MONTHS[viewMonth]}</span></div>
       <div class="cal-nav">
-        ${isThisMonth ? "" : `<button type="button" class="btn btn-secondary cal-today" data-cal-today>Today</button>`}
-        <button type="button" class="btn btn-secondary cal-arrow cal-prev" data-cal-prev aria-label="Previous month">${icon("i-chev", { size: 16, stroke: 2.5 })}</button>
-        <button type="button" class="btn btn-secondary cal-arrow cal-next" data-cal-next aria-label="Next month">${icon("i-chev", { size: 16, stroke: 2.5 })}</button>
+        <button type="button" class="btn cal-arrow cal-prev" data-cal-prev aria-label="Previous month">${icon("i-chev", { size: 16, stroke: 2.5 })}</button>
+        <button type="button" class="btn cal-arrow cal-next" data-cal-next aria-label="Next month">${icon("i-chev", { size: 16, stroke: 2.5 })}</button>
+        <button type="button" class="btn cal-view" data-view="${other}" aria-label="${viewLabel}">${icon(viewIcon, { size: 20, stroke: 2.3 })}</button>
       </div>
     </div>`;
 }
@@ -140,17 +138,14 @@ function dayPanel(byDay) {
   if (!selected) return monthPanel(byDay);
   const events = byDay.get(dayKey(selected)) || [];
   const title = selected.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
-  const isToday = sameDay(selected, today);
-  const count = loading ? "" : events.length ? `${events.length} event${events.length === 1 ? "" : "s"}` : "No events";
   const body = loading
     ? `<div class="skeleton skeleton-line"></div>`
     : events.length
       ? events.map(eventCard).join("")
-      : `${emptyCardHtml("calendar", "Nothing planned", "A quiet day. Pick another date, or jump to what's next.", { compact: true })}${nextEventHint(byDay)}`;
+      : `${emptyCardHtml("calendar", "Nothing planned", "", { compact: true })}${nextEventHint(byDay)}`;
   return `<section class="cal-panel">
     <div class="cal-panel-head">
-      <div class="cal-panel-title">${escapeHtml(title)}${isToday ? ` <span class="today-tag">Today</span>` : ""}</div>
-      <div class="cal-panel-count">${count}</div>
+      <div class="cal-panel-title">${escapeHtml(title)}</div>
     </div>
     ${body}
   </section>`;
@@ -161,11 +156,9 @@ function monthPanel(byDay) {
   const days = [...byDay.entries()]
     .map(([key, list]) => { const [y, m, d] = key.split("-").map(Number); return { date: new Date(y, m, d), list }; })
     .sort((a, b) => a.date - b.date);
-  const total = days.reduce((n, d) => n + d.list.length, 0);
-  const count = loading ? "" : total ? `${total} event${total === 1 ? "" : "s"}` : "No events";
   let body;
   if (loading) body = `<div class="skeleton skeleton-line"></div>`;
-  else if (!days.length) body = emptyCardHtml("calendar", `Nothing in ${MONTHS[viewMonth]} yet`, "New events show up here as soon as they're posted.", { compact: true });
+  else if (!days.length) body = emptyCardHtml("calendar", `Nothing in ${MONTHS[viewMonth]} yet`, "", { compact: true });
   else body = days.map(({ date, list }) => {
     const label = date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
     return `<div class="cal-panel-label">${escapeHtml(label)}</div>${list.map(eventCard).join("")}`;
@@ -173,9 +166,7 @@ function monthPanel(byDay) {
   return `<section class="cal-panel">
     <div class="cal-panel-head">
       <div class="cal-panel-title">${MONTHS[viewMonth]}</div>
-      <div class="cal-panel-count">${count}</div>
     </div>
-    ${days.length ? `<p class="cal-hint">Tap a day to see just that day.</p>` : ""}
     ${body}
   </section>`;
 }
@@ -187,12 +178,11 @@ function agendaHtml(byDay) {
     .map(([k, list]) => { const [y, m, d] = k.split("-").map(Number); return { date: new Date(y, m, d), list }; })
     .sort((a, b) => a.date - b.date);
   if (!days.length) {
-    return `${legendHtml()}${emptyCardHtml("calendar", `Nothing in ${MONTHS[viewMonth]} yet`, "New events show up here as soon as they're posted.", { compact: true })}`;
+    return `${legendHtml()}${emptyCardHtml("calendar", `Nothing in ${MONTHS[viewMonth]} yet`, "", { compact: true })}`;
   }
   return `${legendHtml()}${days.map(({ date, list }) => {
-    const isToday = sameDay(date, today);
     const title = date.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
-    return `<div class="section-heading cal-panel-heading"><div class="label">${escapeHtml(title)}${isToday ? ` <span class="today-tag">Today</span>` : ""}</div><span class="count">${list.length}</span></div>${list.map(eventCard).join("")}`;
+    return `<div class="section-heading cal-panel-heading"><div class="label">${escapeHtml(title)}</div></div>${list.map(eventCard).join("")}`;
   }).join("")}`;
 }
 
@@ -207,7 +197,7 @@ function nextEventHint(byDay) {
   }
   if (!best) return "";
   const label = new Date(best.y, best.m, best.d).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
-  return `<button type="button" class="cal-next-hint" data-goto-day="${best.d}">Next up: <strong>${escapeHtml(best.list[0].title)}</strong> · ${label}</button>`;
+  return `<button type="button" class="cal-next-hint" data-goto-day="${best.d}">Next: <strong>${label}</strong> · ${escapeHtml(best.list[0].title)}</button>`;
 }
 
 function eventCard(u) {
@@ -246,12 +236,6 @@ root.addEventListener("click", (e) => {
   }
   if (e.target.closest("[data-cal-prev]")) return shiftMonth(-1);
   if (e.target.closest("[data-cal-next]")) return shiftMonth(1);
-  if (e.target.closest("[data-cal-today]")) {
-    viewYear = today.getFullYear();
-    viewMonth = today.getMonth();
-    selected = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    return loadMonth();
-  }
   const goto = e.target.closest("[data-goto-day]");
   if (goto) {
     selected = new Date(viewYear, viewMonth, Number(goto.dataset.gotoDay));
