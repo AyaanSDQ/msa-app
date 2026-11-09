@@ -1214,3 +1214,19 @@ body {
 /* a little more room between the controls and the calendar grid */
 .cal-head { margin-bottom: 24px; }
 .cal-nav { gap: 10px; }
+
+/* ═══════════ Calendar: fixed 6-week grid, faint dot under every slot ═══════════ */
+:root { --cal-dot: rgba(91, 46, 145, .075); }
+.cal-grid .cal-num { background: var(--cal-dot); }
+.cal-grid .cal-day.today:not(.selected) .cal-num { background: var(--cal-dot); }
+.cal-grid .cal-day.selected .cal-num, .cal-grid .cal-day.today.selected .cal-num { background: var(--brand); }
+.cal-pad { pointer-events: none; cursor: default; }
+
+/* loading placeholder = the real "Nothing in … yet" card with shimmer for text */
+.cal-loading-msg .empty-title {
+  width: fit-content; max-width: 100%; color: transparent; user-select: none; border-radius: 8px;
+  background: linear-gradient(90deg, rgba(91, 46, 145, .07) 25%, rgba(91, 46, 145, .14) 50%, rgba(91, 46, 145, .07) 75%);
+  background-size: 200% 100%; animation: cal-ghost 1.4s linear infinite;
+}
+@keyframes cal-ghost { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .cal-loading-msg .empty-title { animation: none; } }

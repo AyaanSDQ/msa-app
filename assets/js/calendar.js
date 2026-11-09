@@ -5,6 +5,7 @@ import { TYPE_META, escapeHtml, formatTime, roomLabel, emptyCardHtml } from "./s
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
 const CHIPS_PER_DAY = 2;
+const GRID_SLOTS = 42; // 6 weeks x 7 days
 
 const root = document.getElementById("calendar");
 const today = new Date();
@@ -111,8 +112,11 @@ function monthHtml(byDay) {
   const first = new Date(viewYear, viewMonth, 1);
   const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
 
+  // Always 6 weeks (42 slots), with a faint dot under every slot including the
+  // empty ones, so every month is the same height and the page never shifts.
+  const pad = `<span class="cal-day cal-pad" aria-hidden="true"><span class="cal-num"></span><span class="cal-chips"></span></span>`;
   const cells = [];
-  for (let i = 0; i < first.getDay(); i++) cells.push(`<span class="cal-blank"></span>`);
+  for (let i = 0; i < first.getDay(); i++) cells.push(pad);
   for (let day = 1; day <= daysInMonth; day++) {
     const date = new Date(viewYear, viewMonth, day);
     const events = byDay.get(dayKey(date)) || [];
@@ -122,6 +126,7 @@ function monthHtml(byDay) {
     const label = `${MONTHS[viewMonth]} ${day}` + (events.length ? `, ${events.map((u) => `${u.title} at ${formatTime(u.event_time)}`).join("; ")}` : ", no events");
     cells.push(`<button type="button" class="${cls}" data-day="${day}" aria-label="${escapeHtml(label)}" ${sameDay(date, selected) ? 'aria-pressed="true"' : ""}><span class="cal-num">${day}</span><span class="cal-chips">${chips}${more}</span></button>`);
   }
+  while (cells.length < GRID_SLOTS) cells.push(pad);
 
   return `
     <div class="cal-card">
@@ -139,7 +144,7 @@ function dayPanel(byDay) {
   const events = byDay.get(dayKey(selected)) || [];
   const title = selected.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
   const body = loading
-    ? `<div class="skeleton skeleton-line"></div>`
+    ? loadingMessage("Nothing planned")
     : events.length
       ? events.map(eventCard).join("")
       : `${emptyCardHtml("calendar", "Nothing planned", "", { compact: true })}${nextEventHint(byDay)}`;
@@ -151,13 +156,19 @@ function dayPanel(byDay) {
   </section>`;
 }
 
+// Loading placeholder: the real empty-message card with its text made invisible
+// (shimmer instead), so it is exactly as tall as the message that replaces it.
+function loadingMessage(text) {
+  return `<div class="cal-loading-msg" aria-hidden="true">${emptyCardHtml("calendar", text, "", { compact: true })}</div>`;
+}
+
 // Shown when no day is selected (e.g. after changing month): everything in the month.
 function monthPanel(byDay) {
   const days = [...byDay.entries()]
     .map(([key, list]) => { const [y, m, d] = key.split("-").map(Number); return { date: new Date(y, m, d), list }; })
     .sort((a, b) => a.date - b.date);
   let body;
-  if (loading) body = `<div class="skeleton skeleton-line"></div>`;
+  if (loading) body = loadingMessage(`Nothing in ${MONTHS[viewMonth]} yet`);
   else if (!days.length) body = emptyCardHtml("calendar", `Nothing in ${MONTHS[viewMonth]} yet`, "", { compact: true });
   else body = days.map(({ date, list }) => {
     const label = date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
