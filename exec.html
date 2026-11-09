@@ -21,7 +21,7 @@
       <div class="login-sub">Accounts are pre-created — no public sign-up.</div>
       <div id="login-error" class="error-banner" hidden></div>
       <form id="login-form">
-        <div class="field" style="margin-bottom:11px"><label>Username</label><input class="input" type="text" name="username" required autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="32"></div>
+        <div class="field" style="margin-bottom:11px"><label>Email</label><input class="input" type="email" name="email" required autocomplete="username"></div>
         <div class="field" style="margin-bottom:16px"><label>Password</label><input class="input" type="password" name="password" required autocomplete="current-password"></div>
         <button type="submit" id="login-submit" class="btn btn-primary" style="width:100%;border-radius:12px">Log in</button>
       </form>
@@ -115,7 +115,7 @@
   document.getElementById("new-post-chev").innerHTML = icon("i-chev", { size: 15, stroke: 2.75 });
   document.querySelectorAll(".back-icon").forEach((el) => { el.innerHTML = icon("i-back", { size: 14, stroke: 2.75 }); });
 </script>
-<script type="module" src="assets/js/exec.js?v=5"></script>
+<script type="module" src="assets/js/exec.js?v=4"></script>
 <script src="assets/js/sw-register.js?v=1"></script>
 </body>
 </html>
