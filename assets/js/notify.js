@@ -1,4 +1,4 @@
-import { icon } from "./icons.js";
+import { icon } from "./icons.js?v=11";
 
 // Public OneSignal App ID — a public identifier meant to ship in client
 // code (same trust model as the Supabase anon key), not a secret.

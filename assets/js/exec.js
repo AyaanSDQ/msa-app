@@ -1,13 +1,12 @@
 import { supabase } from "./supabase-client.js";
-import { icon } from "./icons.js";
-import { TYPE_META, typeBanner, escapeHtml, formatTime, formatDateHeading, localDateKey } from "./shared.js";
+import { icon } from "./icons.js?v=11";
+import { TYPE_META, typeBanner, escapeHtml, formatTime, formatDateHeading, formatEventDate, localDateKey, roomLabel } from "./shared.js?v=23";
 
 const loginView = document.getElementById("login-view");
 const appView = document.getElementById("app-view");
 const loginForm = document.getElementById("login-form");
 const loginError = document.getElementById("login-error");
 const loginSubmit = document.getElementById("login-submit");
-const execNameTag = document.getElementById("exec-name-tag");
 const logoutBtn = document.getElementById("logout-btn");
 
 const newPostToggle = document.getElementById("new-post-toggle");
@@ -17,6 +16,9 @@ const typeGrid = document.getElementById("type-grid");
 const locationLabel = document.getElementById("location-label");
 const formError = document.getElementById("form-error");
 const discardBtn = document.getElementById("discard-btn");
+const execNav = document.getElementById("exec-nav");
+const submitBtn = postForm.querySelector('button[type="submit"]');
+const timeHint = document.getElementById("time-hint");
 
 const listView = document.getElementById("list-view");
 const listEl = document.getElementById("events-list");
@@ -32,7 +34,6 @@ const detailFeedbackList = document.getElementById("detail-feedback-list");
 const detailActionbar = document.getElementById("detail-actionbar");
 const detailHint = document.getElementById("detail-hint");
 
-let execNames = new Map(); // user_id -> display_name
 let selectedType = "prayer";
 let currentUserId = null;
 let currentDetailUpdate = null;
@@ -40,7 +41,6 @@ let currentDetailFeedbackCount = 0;
 let feedbackCounts = new Map(); // update_id -> count, kept for Realtime re-renders
 let execChannel = null;
 
-const ROOM_LABEL_TYPES = new Set(["prayer", "exec_meeting"]);
 
 init();
 
@@ -68,6 +68,7 @@ async function renderForSession(session) {
     currentUserId = null;
     loginView.hidden = false;
     appView.hidden = true;
+    execNav.hidden = true;
     teardownRealtime();
     return;
   }
@@ -127,14 +128,25 @@ function applyExecRealtimeRow(row) {
 function showListView() {
   listView.hidden = false;
   detailView.hidden = true;
+  execNav.hidden = false;
 }
 
 function showDetailView() {
   listView.hidden = true;
   detailView.hidden = false;
+  execNav.hidden = true;
 }
 
 // ── Login ────────────────────────────────────────────────────────────────
+
+// Supabase signs in with an email, so a plain username is mapped to a private
+// address on a reserved domain. Typing a full email address still works too.
+const USERNAME_EMAIL_DOMAIN = "ummah.example.com";
+
+function usernameToEmail(input) {
+  const value = input.trim().toLowerCase();
+  return value.includes("@") ? value : `${value.replace(/\s+/g, "")}@${USERNAME_EMAIL_DOMAIN}`;
+}
 
 function wireLoginForm() {
   loginForm.addEventListener("submit", async (e) => {
@@ -143,14 +155,14 @@ function wireLoginForm() {
     loginSubmit.disabled = true;
     loginSubmit.textContent = "Logging in…";
 
-    const email = loginForm.email.value.trim();
+    const email = usernameToEmail(loginForm.username.value);
     const password = loginForm.password.value;
     const { error } = await supabase.auth.signInWithPassword({ email, password });
 
     loginSubmit.disabled = false;
     loginSubmit.textContent = "Log in";
     if (error) {
-      loginError.textContent = "Login failed — check your email and password.";
+      loginError.textContent = "Login failed — check your username and password.";
       loginError.hidden = false;
       return;
     }
@@ -169,14 +181,10 @@ async function loadEventsAndHeader() {
   listSkeleton.hidden = false;
   listEl.innerHTML = "";
 
-  const [{ data: execs }, { data: updates, error: updatesError }, { data: feedbackRows }] = await Promise.all([
-    supabase.from("exec_directory").select("user_id, display_name"),
+  const [{ data: updates, error: updatesError }, { data: feedbackRows }] = await Promise.all([
     supabase.from("updates").select("*").order("created_at", { ascending: false }).limit(100),
     supabase.from("feedback").select("update_id"),
   ]);
-
-  execNames = new Map((execs || []).map((e) => [e.user_id, e.display_name]));
-  execNameTag.textContent = execNames.get(currentUserId) || "Exec";
 
   listSkeleton.hidden = true;
 
@@ -190,6 +198,8 @@ async function loadEventsAndHeader() {
     feedbackCounts.set(row.update_id, (feedbackCounts.get(row.update_id) || 0) + 1);
   }
 
+  // Execs see posts in the order they were created (their edit history), not
+  // by the event time that readers see.
   listEl.innerHTML = (updates || []).length
     ? (updates || []).map((u) => execCardHtml(u, feedbackCounts.get(u.id) || 0)).join("")
     : `<div class="empty-state">${icon("i-inbox", { size: 22, stroke: 2.75 })}<div class="title">No events posted yet.</div></div>`;
@@ -204,7 +214,7 @@ function execCardHtml(update, feedbackCount) {
       <div class="exec-card-icon">${icon("i-trash", { size: 18, stroke: 2.75 })}</div>
       <div class="exec-card-body">
         <div class="exec-card-title">${escapeHtml(update.title)}</div>
-        <div class="exec-card-meta">Deleted · ${formatDateHeading(new Date(update.created_at))} · — ${escapeHtml(attribution(update))}</div>
+        <div class="exec-card-meta">Deleted · ${formatDateHeading(new Date(update.created_at))}</div>
       </div>
       <span class="badge-pill badge-deleted">Deleted</span>
     </div>`;
@@ -227,7 +237,7 @@ function execCardHtml(update, feedbackCount) {
         <div class="exec-card-icon" style="color:var(--type-${update.type}-icon)">${icon(meta.iconId, { size: 18 })}</div>
         <div class="exec-card-body">
           <div class="exec-card-title">${escapeHtml(update.title)}</div>
-          <div class="exec-card-meta">${formatDateHeading(new Date(update.created_at))} · ${escapeHtml(update.body || "")} · — ${escapeHtml(attribution(update))}</div>
+          <div class="exec-card-meta">${formatDateHeading(new Date(update.created_at))} · ${escapeHtml(update.body || "")}</div>
         </div>
       </div>
     </div>`;
@@ -238,29 +248,39 @@ function execCardHtml(update, feedbackCount) {
 
 function execMetaLine(update, feedbackCount) {
   const parts = [];
-  const isToday = localDateKey(update.created_at) === localDateKey(new Date());
+  const isToday = !!update.event_time && localDateKey(update.event_time) === localDateKey(new Date());
   if (update.event_time) {
     parts.push(`${isToday ? "Today" : formatDateHeading(new Date(update.event_time))} ${formatTime(update.event_time)}`);
   } else {
     parts.push(formatDateHeading(new Date(update.created_at)));
   }
   if (update.type === "exec_meeting") {
-    if (update.location) parts.push(escapeHtml(update.location));
+    if (update.location) parts.push(escapeHtml(roomLabel(update.location)));
     parts.push("exec only");
   } else {
     parts.push(`${feedbackCount} feedback`);
   }
-  parts.push(`— ${escapeHtml(attribution(update))}`);
   return parts.join(" · ");
-}
-
-function attribution(update) {
-  return execNames.get(update.posted_by) || "an exec";
 }
 
 // ── New post form ────────────────────────────────────────────────────────
 
+// Prayer, Social and Exec meeting posts need a time; announcements don't.
+// Until a required time is set the submit button is faded out and reads
+// "Set time"; once set (or for announcements) it's the normal "Post update".
+function syncSubmitState() {
+  const needsTime = selectedType !== "announcement";
+  const blocked = needsTime && !postForm.event_time.value;
+  submitBtn.disabled = blocked;
+  submitBtn.textContent = blocked ? "Set time" : "Post update";
+  timeHint.textContent = needsTime ? "(required)" : "(optional)";
+}
+
 function wireNewPostForm() {
+  postForm.event_time.addEventListener("input", syncSubmitState);
+  postForm.event_time.addEventListener("change", syncSubmitState);
+  syncSubmitState();
+
   newPostToggle.addEventListener("click", () => {
     const willOpen = !postForm.classList.contains("open");
     postForm.classList.toggle("open", willOpen);
@@ -278,13 +298,13 @@ function wireNewPostForm() {
     if (!btn) return;
     selectedType = btn.dataset.type;
     typeGrid.querySelectorAll(".type-option").forEach((b) => b.classList.toggle("selected", b === btn));
-    locationLabel.textContent = ROOM_LABEL_TYPES.has(selectedType) ? "Room" : "Location";
+    locationLabel.textContent = "Room number";
+    syncSubmitState();
   });
 
   postForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     formError.hidden = true;
-    const submitBtn = postForm.querySelector('button[type="submit"]');
     submitBtn.disabled = true;
 
     const title = postForm.title.value.trim();
@@ -296,11 +316,17 @@ function wireNewPostForm() {
     if (!title) {
       formError.textContent = "Title is required.";
       formError.hidden = false;
-      submitBtn.disabled = false;
+      syncSubmitState();
+      return;
+    }
+    if (selectedType !== "announcement" && !timeValue) {
+      formError.textContent = "Set a time for this post.";
+      formError.hidden = false;
+      syncSubmitState();
       return;
     }
 
-    const { error } = await supabase.from("updates").insert({
+    const payload = {
       type: selectedType,
       title,
       location: location || null,
@@ -308,13 +334,26 @@ function wireNewPostForm() {
       body: body || null,
       accepts_feedback: acceptsFeedback,
       posted_by: currentUserId,
-    });
+    };
+    // Optional presentation fields are only sent when used, so posting still
+    // works before the matching database migration has been applied.
+    const imageUrl = postForm.image_url.value.trim();
+    const priority = postForm.priority.value;
+    const pinned = postForm.pinned.checked;
+    const usesExtras = !!imageUrl || priority !== "normal" || pinned;
+    if (imageUrl) payload.image_url = imageUrl;
+    if (priority !== "normal") payload.priority = priority;
+    if (pinned) payload.pinned = true;
 
-    submitBtn.disabled = false;
+    const { error } = await supabase.from("updates").insert(payload);
+
+    syncSubmitState();
 
     if (error) {
       console.error("Post failed", error);
-      formError.textContent = "Couldn't post — check the required fields and try again.";
+      formError.textContent = usesExtras
+        ? "Couldn't post. If you used an image, priority or pin, make sure the latest database migration has been applied."
+        : "Couldn't post — check the required fields and try again.";
       formError.hidden = false;
       return;
     }
@@ -322,7 +361,8 @@ function wireNewPostForm() {
     postForm.reset();
     selectedType = "prayer";
     typeGrid.querySelectorAll(".type-option").forEach((b) => b.classList.toggle("selected", b.dataset.type === "prayer"));
-    locationLabel.textContent = "Room";
+    locationLabel.textContent = "Room number";
+    syncSubmitState();
     postForm.classList.remove("open");
     newPostChev.classList.add("collapsed");
     loadEventsAndHeader();
@@ -403,28 +443,28 @@ function renderDetailCard(update, feedbackCount = 0) {
   const kicker = `${meta.label}${statusLabel}${update.type === "exec_meeting" ? " · exec only" : ""}`;
 
   const chips = [];
-  if (update.event_time) chips.push(`<span class="chip">${icon("i-clock", { size: 13, stroke: 2.75 })}${formatTime(update.event_time)}</span>`);
-  if (update.location) chips.push(`<span class="chip">${icon("i-pin", { size: 13, stroke: 2.75 })}${escapeHtml(update.location)}</span>`);
+  if (update.event_time) {
+    chips.push(`<span class="chip">${icon("i-calendar", { size: 14 })}${formatEventDate(update.event_time)}</span>`);
+    chips.push(`<span class="chip">${icon("i-clock", { size: 14 })}${formatTime(update.event_time)}</span>`);
+  }
+  if (update.location) chips.push(`<span class="chip">${icon("i-pin", { size: 13, stroke: 2.75 })}${escapeHtml(roomLabel(update.location))}</span>`);
 
   const fourthCell = update.type === "exec_meeting"
     ? `<div><div class="detail-meta-label">Visibility</div>Never shown to readers</div>`
     : `<div><div class="detail-meta-label">Status</div>${statusText(update.status)}</div>`;
 
   detailCardEl.innerHTML = `
-    <div class="hero-card" style="background:var(--type-${update.type}-hero)">
+    <div class="hero-card" style="--c:var(--type-${update.type}-hero)">
       <div class="hero-banner" style="background:var(--type-${update.type}-banner);color:var(--type-${update.type}-hero)">${typeBanner(update.type)}</div>
       <div class="hero-body">
-        <div class="hero-top">
-          <div class="hero-icon">${icon(meta.iconId, { size: 22 })}</div>
-          <div>
-            <div class="hero-kicker" style="color:var(--type-${update.type}-chip)">${kicker}</div>
-            <div class="hero-title">${escapeHtml(update.title)}</div>
-          </div>
+        <div class="hero-eyebrow">
+          <span class="hero-type">${icon(meta.iconId, { size: 15 })}${meta.label}</span>
+          <span class="hero-status">${escapeHtml(kicker.slice(meta.label.length).replace(/^ · /, "").replace(/^./, (c) => c.toUpperCase()))}</span>
         </div>
+        <div class="hero-title">${escapeHtml(update.title)}</div>
         ${chips.length ? `<div class="hero-chips">${chips.join("")}</div>` : ""}
         ${update.body ? `<p class="hero-notes">${escapeHtml(update.body)}</p>` : ""}
         <div class="detail-meta-grid">
-          <div><div class="detail-meta-label">Posted by</div>${escapeHtml(attribution(update))}</div>
           <div><div class="detail-meta-label">Created</div>${formatDateHeading(new Date(update.created_at))} ${formatTime(update.created_at)}</div>
           <div><div class="detail-meta-label">Feedback</div>${update.accepts_feedback ? "Open" : "Closed"} · ${feedbackCount} received</div>
           ${fourthCell}

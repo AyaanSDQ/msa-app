@@ -1,22 +1,37 @@
 import { supabase } from "./supabase-client.js";
-import { icon } from "./icons.js";
+import { icon } from "./icons.js?v=11";
 import {
   TYPE_META,
   typeBanner,
   escapeHtml,
   formatTime,
+  formatEventDate,
   formatDateHeading,
   isSameLocalDay,
   localDateKey,
+  effectiveTime,
+  bucketOf,
   formatRelative,
   cancelledBanner,
-} from "./shared.js";
+  roomLabel,
+  safeImageUrl,
+  priorityOf,
+  isEventPost,
+  badgesHtml,
+  dateTileHtml,
+  emptyCardHtml,
+} from "./shared.js?v=23";
 
 const PAGE_SIZE = 20;
 const heroEl = document.getElementById("hero");
 const todayEl = document.getElementById("today-posts");
 const todayCountEl = document.getElementById("today-count");
 const historyEl = document.getElementById("history");
+const todaySection = document.getElementById("today-section");
+const upcomingEl = document.getElementById("upcoming-posts");
+const upcomingCountEl = document.getElementById("upcoming-count");
+const upcomingSection = document.getElementById("upcoming-section");
+const historySection = document.getElementById("history-section");
 const loadMoreWrap = document.getElementById("load-more-wrap");
 const loadMoreBtn = document.getElementById("load-more");
 const skeletonEl = document.getElementById("skeleton");
@@ -24,13 +39,19 @@ const pageEl = document.getElementById("page");
 const newUpdatePill = document.getElementById("new-update-pill");
 const newUpdatePillBtn = document.getElementById("new-update-pill-btn");
 
-let execNames = new Map(); // user_id -> display_name
-let historyOffset = 0;
+// Posts are placed by the time set on them (event_time), falling back to when
+// they were posted for untimed ones. History pages through two sources (timed
+// and untimed) that are merged by that effective time, so each keeps its own
+// offset.
+let timedOffset = 0;
+let untimedOffset = 0;
+let historyCount = 0; // history cards currently on screen
 let historyDone = false;
 
 // Today's active-post set, kept live so Realtime events can recompute the
 // hero (pickHero needs the whole day's set, not just one changed row).
 let todayRows = [];
+let upcomingRows = [];
 let hasDeferredTodayUpdate = false;
 
 // Realtime events can arrive before the initial fetch finishes; buffer them
@@ -43,22 +64,13 @@ init();
 async function init() {
   setupRealtime();
 
-  const [{ data: execs }, firstBatch] = await Promise.all([
-    supabase.from("exec_directory").select("user_id, display_name"),
-    fetchBatch(0, PAGE_SIZE),
-  ]);
-  execNames = new Map((execs || []).map((e) => [e.user_id, e.display_name]));
-
-  const rows = firstBatch;
-  historyOffset = rows.length;
-  historyDone = rows.length < PAGE_SIZE;
-
   const now = new Date();
-  todayRows = rows.filter((r) => isSameLocalDay(new Date(r.created_at), now));
-  const historyRows = rows.filter((r) => !isSameLocalDay(new Date(r.created_at), now));
+  const [{ today, upcoming }, historyRows] = await Promise.all([fetchTodayAndUpcoming(now), fetchHistoryPage(now)]);
+  todayRows = today;
+  upcomingRows = upcoming;
 
-  renderToday(now);
   renderHistoryBatch(historyRows);
+  renderToday(now);
   updateLoadMoreVisibility();
 
   skeletonEl.hidden = true;
@@ -78,26 +90,61 @@ async function init() {
   maybeScrollToAnchor();
 }
 
-async function fetchBatch(offset, limit) {
-  const { data, error } = await supabase
-    .from("updates")
-    .select("*")
-    .neq("status", "deleted")
-    .order("created_at", { ascending: false })
-    .range(offset, offset + limit - 1);
-  if (error) {
-    console.error("Failed to load updates", error);
-    return [];
+// Exec meetings are hidden from readers by RLS; the filter also keeps them
+// out when an exec views this page while signed in (the exec "View" tab).
+function baseQuery() {
+  return supabase.from("updates").select("*").neq("status", "deleted").neq("type", "exec_meeting");
+}
+
+function dayBounds(now) {
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  return { start: start.toISOString(), end: end.toISOString() };
+}
+
+// Today = timed posts happening today, plus untimed posts made today.
+// Upcoming = timed posts on a later day.
+async function fetchTodayAndUpcoming(now) {
+  const { start, end } = dayBounds(now);
+  const [todayRes, upcomingRes] = await Promise.all([
+    baseQuery().or(`and(event_time.gte.${start},event_time.lt.${end}),and(event_time.is.null,created_at.gte.${start},created_at.lt.${end})`),
+    baseQuery().gte("event_time", end).order("event_time", { ascending: true }).limit(50),
+  ]);
+  if (todayRes.error) console.error("Failed to load today's updates", todayRes.error);
+  if (upcomingRes.error) console.error("Failed to load upcoming updates", upcomingRes.error);
+  return { today: todayRes.data || [], upcoming: upcomingRes.data || [] };
+}
+
+// One page of history (everything whose effective time is before today),
+// newest first. Takes a page's worth from each source, merges them, and only
+// advances each source's offset by how many rows were actually used.
+async function fetchHistoryPage(now) {
+  const { start } = dayBounds(now);
+  const [timedRes, untimedRes] = await Promise.all([
+    baseQuery().lt("event_time", start).order("event_time", { ascending: false }).range(timedOffset, timedOffset + PAGE_SIZE - 1),
+    baseQuery().is("event_time", null).lt("created_at", start).order("created_at", { ascending: false }).range(untimedOffset, untimedOffset + PAGE_SIZE - 1),
+  ]);
+  if (timedRes.error || untimedRes.error) console.error("Failed to load history", timedRes.error || untimedRes.error);
+  const timed = timedRes.data || [];
+  const untimed = untimedRes.data || [];
+
+  const page = [];
+  let t = 0;
+  let u = 0;
+  while (page.length < PAGE_SIZE && (t < timed.length || u < untimed.length)) {
+    const takeTimed = u >= untimed.length || (t < timed.length && new Date(effectiveTime(timed[t])) >= new Date(effectiveTime(untimed[u])));
+    page.push(takeTimed ? timed[t++] : untimed[u++]);
   }
-  return data;
+  timedOffset += t;
+  untimedOffset += u;
+  historyDone = page.length < PAGE_SIZE;
+  return page.sort((a, b) => new Date(effectiveTime(b)) - new Date(effectiveTime(a)) || tiebreak(a, b));
 }
 
 async function handleLoadMore() {
   loadMoreBtn.disabled = true;
   loadMoreBtn.textContent = "Loading…";
-  const rows = await fetchBatch(historyOffset, PAGE_SIZE);
-  historyOffset += rows.length;
-  if (rows.length < PAGE_SIZE) historyDone = true;
+  const rows = await fetchHistoryPage(new Date());
   renderHistoryBatch(rows, { append: true });
   updateLoadMoreVisibility();
   loadMoreBtn.disabled = false;
@@ -109,7 +156,8 @@ function updateLoadMoreVisibility() {
 }
 
 // ── Hero selection ──────────────────────────────────────────────────────
-// Among today's active posts: prefer the soonest still-upcoming event_time
+// "Today" means the time set on the post is today (untimed posts: posted
+// today). Among today's active posts: prefer the soonest still-upcoming event_time
 // ("up next"); if everything scheduled today has already passed, fall back
 // to whichever happened most recently; if nothing has a time at all, fall
 // back to the most recently posted. Cancelled posts never become the hero
@@ -118,36 +166,76 @@ function pickHero(todayRows, now) {
   const eligible = todayRows.filter((r) => r.status === "active");
   if (eligible.length === 0) return null;
 
+  // Pinned and high-priority posts always take the featured spot.
+  const flagged = eligible.filter((r) => postWeight(r) > 0).sort((a, b) => postWeight(b) - postWeight(a) || new Date(b.created_at) - new Date(a.created_at));
+  if (flagged.length) return flagged[0];
+
   const withTime = eligible.filter((r) => r.event_time);
   const upcoming = withTime
     .filter((r) => new Date(r.event_time) >= now)
-    .sort((a, b) => new Date(a.event_time) - new Date(b.event_time));
+    .sort((a, b) => new Date(a.event_time) - new Date(b.event_time) || tiebreak(a, b));
   if (upcoming.length) return upcoming[0];
 
-  const past = withTime.sort((a, b) => new Date(b.event_time) - new Date(a.event_time));
+  const past = withTime.sort((a, b) => new Date(b.event_time) - new Date(a.event_time) || tiebreak(a, b));
   if (past.length) return past[0];
 
   const byCreated = [...eligible].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   return byCreated[0];
 }
 
+// Posts with the same effective time: events (prayer/social) come before
+// announcements, then whichever was posted most recently.
+function tiebreak(a, b) {
+  const rank = (r) => (r.type === "announcement" ? 1 : 0);
+  return rank(a) - rank(b) || new Date(b.created_at) - new Date(a.created_at);
+}
+
+function postWeight(r) {
+  return (r.pinned ? 4 : 0) + (priorityOf(r) === "urgent" ? 3 : priorityOf(r) === "important" ? 2 : 0);
+}
+
 function renderToday(now) {
   const hero = pickHero(todayRows, now);
-  heroEl.innerHTML = hero ? heroCardHtml(hero) : heroEmptyHtml();
+  const rest = todayRows
+    .filter((r) => r !== hero)
+    .sort((a, b) => postWeight(b) - postWeight(a) || new Date(effectiveTime(a)) - new Date(effectiveTime(b)) || tiebreak(a, b));
 
-  const rest = todayRows.filter((r) => r !== hero);
+  heroEl.innerHTML = hero ? heroCardHtml(hero) : "";
   todayCountEl.textContent = String(rest.length);
-  todayEl.innerHTML = rest.length
-    ? rest.map((r) => listCardHtml(r)).join("")
-    : emptyStateHtml("No other updates posted yet for today");
+  todayEl.innerHTML = rest.map((r) => listCardHtml(r)).join("");
+  todaySection.hidden = rest.length === 0;
+
+  const upcoming = [...upcomingRows].sort((a, b) => new Date(a.event_time) - new Date(b.event_time) || tiebreak(a, b));
+  upcomingCountEl.textContent = String(upcoming.length);
+  upcomingEl.innerHTML = upcoming.map((r) => listCardHtml(r)).join("");
+  upcomingSection.hidden = upcoming.length === 0;
+  syncEmptyState();
+}
+
+// Never two empty states at once, and a section with nothing in it is hidden.
+function syncEmptyState() {
+  const hasHero = !!heroEl.querySelector(".hero-card");
+  const hasToday = todayEl.children.length > 0;
+  const hasAnything = hasHero || hasToday || upcomingEl.children.length > 0 || historyCount > 0;
+
+  if (!hasHero) {
+    if (!hasAnything) {
+      heroEl.innerHTML = emptyCardHtml("today", "Welcome to Ummah", "Announcements, events and updates from the MSA show up here the moment they're posted.", { cta: { href: "calendar.html", label: "Open the calendar" } });
+    } else if (!hasToday) {
+      heroEl.innerHTML = emptyCardHtml("today", "Nothing new today", "You're all caught up. See what's coming up on the calendar.", { compact: true, cta: { href: "calendar.html", label: "Open the calendar" } });
+    }
+  }
+  historySection.hidden = historyCount === 0;
 }
 
 function renderHistoryBatch(rows, { append = false } = {}) {
-  if (!append) historyEl.innerHTML = "";
-  if (rows.length === 0 && !append) {
-    historyEl.innerHTML = emptyStateHtml("No past updates yet");
+  if (!append) { historyEl.innerHTML = ""; historyCount = 0; delete historyEl.dataset.lastGroupKey; }
+  if (rows.length === 0) {
+    historySection.hidden = historyCount === 0;
     return;
   }
+  historyCount += rows.length;
+  historySection.hidden = false;
 
   let currentGroup = null;
   let groupWrap = null;
@@ -155,11 +243,11 @@ function renderHistoryBatch(rows, { append = false } = {}) {
   let activeKey = lastKey;
 
   for (const row of rows) {
-    const key = localDateKey(row.created_at);
+    const key = localDateKey(effectiveTime(row));
     if (key !== activeKey) {
       const heading = document.createElement("div");
       heading.className = "date-heading";
-      heading.textContent = formatDateHeading(new Date(row.created_at));
+      heading.textContent = formatDateHeading(new Date(effectiveTime(row)));
       historyEl.appendChild(heading);
 
       groupWrap = document.createElement("div");
@@ -176,60 +264,77 @@ function renderHistoryBatch(rows, { append = false } = {}) {
 
 function heroCardHtml(update) {
   const meta = TYPE_META[update.type];
+  const img = safeImageUrl(update);
+  const upcoming = update.event_time && new Date(update.event_time) > new Date();
+  const status =
+    update.status === "cancelled"
+      ? `<span class="badge badge-cancelled">Cancelled</span>`
+      : !badgesHtml(update) && upcoming
+        ? `<span class="badge badge-soon">Up next</span>`
+        : "";
+  const badges = `<div class="hero-badges">${badgesHtml(update)}${status}</div>`;
+  const media = img
+    ? `<div class="hero-media has-image"><img src="${escapeHtml(img)}" alt="" loading="lazy" decoding="async" onerror="this.closest('.hero-media').className='hero-media is-pattern';this.remove()">${badges}</div>`
+    : `<div class="hero-media is-pattern"><span class="hero-media-icon">${icon(meta.iconId, { size: 24 })}</span>${badges}</div>`;
   return `
-  <div class="hero-card" style="background:var(--type-${update.type}-hero)" data-update-id="${update.id}">
-    <div class="hero-banner" style="background:var(--type-${update.type}-banner);color:var(--type-${update.type}-hero)">${typeBanner(update.type)}</div>
+  <article class="hero-card hero-v2" style="--c:var(--type-${update.type}-hero)" data-update-id="${update.id}">
+    ${media}
     <div class="hero-body">
-      <div class="hero-top">
-        <div class="hero-icon">${icon(meta.iconId, { size: 22 })}</div>
-        <div>
-          <div class="hero-kicker" style="color:var(--type-${update.type}-chip)">${meta.label}${update.status === "cancelled" ? " · cancelled" : " · up next"}</div>
-          <div class="hero-title">${escapeHtml(update.title)}</div>
-        </div>
-      </div>
+      <div class="hero-eyebrow"><span class="hero-type"><i></i>${meta.label}</span></div>
+      <h2 class="hero-title">${escapeHtml(update.title)}</h2>
       ${chipsHtml(update)}
       ${update.body ? `<p class="hero-notes">${escapeHtml(update.body)}</p>` : ""}
       <div class="hero-footer" data-updated-at="${update.created_at}">
-        <span class="updated-text">${formatRelative(update.created_at)} · ${escapeHtml(attributionFor(update))}</span>
+        <span class="updated-text">${formatRelative(update.created_at)}</span>
         ${feedbackToggleHtml(update)}
       </div>
       ${feedbackRowHtml(update)}
     </div>
-  </div>`;
-}
-
-function heroEmptyHtml() {
-  return `<div class="hero-empty">${icon("i-inbox", { size: 26 })}<div>No update posted yet for today</div></div>`;
+  </article>`;
 }
 
 function chipsHtml(update) {
   const chips = [];
-  if (update.event_time) chips.push(`<span class="chip">${icon("i-clock", { size: 13, stroke: 2.75 })}${formatTime(update.event_time)}</span>`);
-  if (update.location) chips.push(`<span class="chip">${icon("i-pin", { size: 13, stroke: 2.75 })}${escapeHtml(update.location)}</span>`);
+  if (update.event_time) {
+    chips.push(`<span class="chip">${icon("i-calendar", { size: 14 })}${formatEventDate(update.event_time)}</span>`);
+    chips.push(`<span class="chip">${icon("i-clock", { size: 14 })}${formatTime(update.event_time)}</span>`);
+  }
+  if (update.location) chips.push(`<span class="chip">${icon("i-pin", { size: 14 })}${escapeHtml(roomLabel(update.location))}</span>`);
   return chips.length ? `<div class="hero-chips">${chips.join("")}</div>` : "";
 }
 
+// Standard announcement card, or an event card (date tile) for dated events.
 function listCardHtml(update) {
   const meta = TYPE_META[update.type];
+  const event = isEventPost(update);
+  const pr = priorityOf(update);
+  const img = safeImageUrl(update);
+  const lead = event
+    ? dateTileHtml(update.event_time, update.type)
+    : `<div class="list-icon" style="color:var(--type-${update.type}-icon)">${icon(meta.iconId, { size: 22 })}</div>`;
+  const thumb = img ? `<img class="card-thumb" src="${escapeHtml(img)}" alt="" loading="lazy" decoding="async" onerror="this.remove()">` : "";
+  const badges = badgesHtml(update);
   const body = `
-    <div class="list-icon" style="color:var(--type-${update.type}-icon)">${icon(meta.iconId, { size: 19, stroke: 2.75 })}</div>
+    ${lead}
     <div class="list-body">
-      <div class="list-kicker" style="color:var(--type-${update.type}-icon)">${meta.label}</div>
+      <div class="list-kicker" style="color:var(--type-${update.type}-icon)"><i></i>${meta.label}${badges ? `<span class="kicker-badges">${badges}</span>` : ""}</div>
       <div class="list-title">${escapeHtml(update.title)}</div>
-      <div class="list-meta">${metaLine(update)}</div>
+      <div class="list-meta">${metaLine(update, { skipDate: event })}</div>
       ${update.body ? `<p class="list-notes">${escapeHtml(update.body)}</p>` : ""}
       <div class="list-updated" data-updated-at="${update.created_at}">
-        <span class="updated-text">${formatRelative(update.created_at)} · ${escapeHtml(attributionFor(update))}</span>
+        <span class="updated-text">${formatRelative(update.created_at)}</span>
       </div>
       ${feedbackRowHtml(update)}
-    </div>`;
+    </div>
+    ${thumb}`;
+  const cls = `list-card ${event ? "card-event" : "card-announcement"}${pr !== "normal" ? ` is-${pr}` : ""}`;
   if (update.status === "cancelled") {
     return `<div class="hist-card" data-update-id="${update.id}" style="background:var(--type-${update.type}-list)">
       ${cancelledBanner()}
-      <div class="list-card" style="box-shadow:none;margin-bottom:0">${body}</div>
+      <div class="${cls}" style="box-shadow:none;margin-bottom:0">${body}</div>
     </div>`;
   }
-  return `<div class="list-card" style="background:var(--type-${update.type}-list)" data-update-id="${update.id}">${body}</div>`;
+  return `<div class="${cls}" style="background:var(--type-${update.type}-list)" data-update-id="${update.id}">${body}</div>`;
 }
 
 function histCardHtml(update) {
@@ -239,7 +344,7 @@ function histCardHtml(update) {
       <div class="hist-icon" style="color:var(--type-${update.type}-icon)">${icon(meta.iconId, { size: 16 })}</div>
       <div class="list-body">
         <div class="hist-title">${escapeHtml(update.title)}</div>
-        <div class="hist-meta">${metaLine(update)} · ${escapeHtml(attributionFor(update))}</div>
+        <div class="hist-meta">${metaLine(update)}</div>
       </div>
       ${feedbackToggleHtml(update)}
     </div>
@@ -250,19 +355,14 @@ function histCardHtml(update) {
   return `<div class="hist-card" style="background:var(--type-${update.type}-list)" data-update-id="${update.id}">${row}</div>`;
 }
 
-function metaLine(update) {
+function metaLine(update, { skipDate = false } = {}) {
   const parts = [];
-  if (update.event_time) parts.push(formatTime(update.event_time));
-  if (update.location) parts.push(escapeHtml(update.location));
+  if (update.event_time) {
+    if (!skipDate) parts.push(formatEventDate(update.event_time));
+    parts.push(formatTime(update.event_time));
+  }
+  if (update.location) parts.push(escapeHtml(roomLabel(update.location)));
   return parts.join(" · ");
-}
-
-function attributionFor(update) {
-  return execNames.get(update.posted_by) || "an exec";
-}
-
-function emptyStateHtml(text) {
-  return `<div class="empty-state">${icon("i-inbox", { size: 22, stroke: 2.75 })}<div class="title">${escapeHtml(text)}</div></div>`;
 }
 
 // ── Feedback ─────────────────────────────────────────────────────────────
@@ -397,19 +497,23 @@ function handleRealtimeEvent(payload) {
   else if (row.status === "active") handleActiveArrival(row);
 }
 
+function removeFromSets(id) {
+  todayRows = todayRows.filter((r) => r.id !== id);
+  upcomingRows = upcomingRows.filter((r) => r.id !== id);
+}
+
 function handleActiveArrival(row) {
   const now = new Date();
-  const isToday = isSameLocalDay(new Date(row.created_at), now);
+  const bucket = bucketOf(row, now);
 
-  if (!isToday) {
+  removeFromSets(row.id);
+  if (bucket === "history") {
     const el = document.querySelector(`[data-update-id="${row.id}"]`);
     if (el && historyEl.contains(el)) el.outerHTML = histCardHtml(row);
     return;
   }
 
-  const idx = todayRows.findIndex((r) => r.id === row.id);
-  if (idx >= 0) todayRows[idx] = row;
-  else todayRows.push(row);
+  (bucket === "today" ? todayRows : upcomingRows).push(row);
 
   if (isScrolledNearTop()) {
     renderToday(now);
@@ -421,15 +525,17 @@ function handleActiveArrival(row) {
 
 function handleCancelled(row) {
   const now = new Date();
-  const isToday = isSameLocalDay(new Date(row.created_at), now);
+  const inToday = todayRows.some((r) => r.id === row.id);
+  const inUpcoming = upcomingRows.some((r) => r.id === row.id);
 
-  if (isToday) {
-    const idx = todayRows.findIndex((r) => r.id === row.id);
-    if (idx < 0) return; // not part of the currently-loaded today set
-    const wasHero = pickHero(todayRows, now)?.id === row.id;
-    todayRows[idx] = row;
+  if (inToday || inUpcoming) {
+    const wasHero = inToday && pickHero(todayRows, now)?.id === row.id;
+    removeFromSets(row.id);
+    const bucket = bucketOf(row, now);
+    if (bucket === "today") todayRows.push(row);
+    else if (bucket === "upcoming") upcomingRows.push(row);
 
-    if (wasHero) {
+    if (wasHero || bucket === "history") {
       renderToday(now);
     } else {
       const el = document.querySelector(`[data-update-id="${row.id}"]`);
@@ -444,29 +550,18 @@ function handleCancelled(row) {
 
 function handleDeleted(id) {
   const el = document.querySelector(`[data-update-id="${id}"]`);
-  const todayIdx = todayRows.findIndex((r) => r.id === id);
+  const inSets = todayRows.some((r) => r.id === id) || upcomingRows.some((r) => r.id === id);
 
   if (!el) {
-    if (todayIdx >= 0) todayRows.splice(todayIdx, 1);
+    removeFromSets(id);
     return;
   }
 
-  const wasHero = todayIdx >= 0 && pickHero(todayRows, new Date())?.id === id;
-
   animateRemove(el, () => {
-    const idx = todayRows.findIndex((r) => r.id === id);
-    if (idx >= 0) todayRows.splice(idx, 1);
-
-    if (wasHero) {
-      renderToday(new Date());
-    } else if (todayIdx >= 0) {
-      const heroNow = pickHero(todayRows, new Date());
-      const rest = todayRows.filter((r) => r !== heroNow);
-      todayCountEl.textContent = String(rest.length);
-      if (rest.length === 0) {
-        todayEl.innerHTML = emptyStateHtml("No other updates posted yet for today");
-      }
-    }
+    removeFromSets(id);
+    if (inSets) renderToday(new Date());
+    historyCount = historyEl.querySelectorAll(".hist-card").length;
+    syncEmptyState();
   });
 }
 

@@ -3,26 +3,27 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>MSA Updates</title>
-<meta name="description" content="Prayer times, locations, and event updates for the MSA.">
-<link rel="stylesheet" href="assets/css/app.css?v=4">
+<title>Ummah</title>
+<meta name="description" content="Updates, room numbers and events.">
+<link rel="stylesheet" href="assets/css/app.css?v=96">
 <link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/svg+xml" href="assets/icons/logo.svg">
 <link rel="icon" href="assets/icons/icon-192.png">
 <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
-<meta name="theme-color" content="#c67139">
+<meta name="theme-color" content="#5b2e91">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="MSA Updates">
+<meta name="apple-mobile-web-app-title" content="Ummah">
 </head>
 <body>
 
 <div id="icon-sprite"></div>
 
 <div class="app">
-  <header class="app-header">
-    <div class="app-title">MSA Updates</div>
-    <a href="exec.html" class="exec-link">Exec login</a>
+  <header class="app-header masthead">
+    <div class="app-title" aria-label="Ummah"><span class="app-name">Ummah</span></div>
   </header>
+
 
   <div id="install-banner" class="install-banner" hidden></div>
   <div id="notify-banner" class="install-banner" hidden></div>
@@ -39,31 +40,56 @@
     </div>
     <div id="hero"></div>
 
-    <div class="section-heading">
-      <div class="label">Today's other posts</div>
-      <span class="count" id="today-count">0</span>
-    </div>
-    <div id="today-posts"></div>
+    <section id="today-section" class="feed-section" hidden>
+      <div class="section-heading">
+        <div class="label">More today</div>
+        <span class="count" id="today-count">0</span>
+      </div>
+      <div id="today-posts"></div>
+    </section>
 
-    <div class="divider"></div>
+    <section id="upcoming-section" class="feed-section" hidden>
+      <div class="section-heading">
+        <div class="label">Coming up</div>
+        <span class="count" id="upcoming-count">0</span>
+      </div>
+      <div id="upcoming-posts"></div>
+    </section>
 
-    <div class="section-heading"><div class="label">History</div></div>
-    <div id="history"></div>
-
-    <div id="load-more-wrap" hidden>
-      <button type="button" id="load-more" class="btn load-more">Load more</button>
-    </div>
+    <section id="history-section" class="feed-section" hidden>
+      <div class="section-heading"><div class="label">Earlier</div></div>
+      <div id="history"></div>
+      <div id="load-more-wrap" hidden>
+        <button type="button" id="load-more" class="btn load-more">Load more</button>
+      </div>
+    </section>
   </div>
+
+  <footer class="app-footer">
+    <nav class="footer-links" aria-label="Footer">
+      <a href="privacy.html">Privacy Policy</a>
+      <a href="terms.html">Terms of Use</a>
+      <a href="exec.html">Administrative login</a>
+    </nav>
+    <p class="footer-note">Made by students, for our community.</p>
+    <p class="footer-copy">&copy; 2026 Ummah</p>
+  </footer>
+
+  <nav class="bnav" aria-label="Sections">
+    <a href="index.html" class="bnav-item" aria-current="page"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-mega"></use></svg><span>Updates</span></a>
+    <a href="calendar.html" class="bnav-item"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-calendar"></use></svg><span>Calendar</span></a>
+  </nav>
 </div>
 
 <script type="module">
-  import { ICON_SPRITE } from "./assets/js/icons.js?v=4";
+  import { ICON_SPRITE } from "./assets/js/icons.js?v=11";
   document.getElementById("icon-sprite").innerHTML = ICON_SPRITE;
 </script>
-<script type="module" src="assets/js/reader.js?v=2"></script>
-<script type="module" src="assets/js/install.js?v=1"></script>
+<script type="module" src="assets/js/reader.js?v=31"></script>
+<script type="module" src="assets/js/install.js?v=8"></script>
+<script src="assets/js/fx.js?v=4" defer></script>
 <script src="assets/js/sw-register.js?v=1"></script>
 <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
-<script type="module" src="assets/js/notify.js?v=1"></script>
+<script type="module" src="assets/js/notify.js?v=4"></script>
 </body>
 </html>
