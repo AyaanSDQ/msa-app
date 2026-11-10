@@ -760,8 +760,9 @@ h1, h2, h3, .hero-title, .list-title, .cal-month, .cal-panel-title, .login-title
 :root { --t: .2s; --t-fast: .12s; }
 
 @keyframes enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-@keyframes month-next { from { opacity: 0; transform: translateX(22px); } to { opacity: 1; transform: none; } }
-@keyframes month-prev { from { opacity: 0; transform: translateX(-22px); } to { opacity: 1; transform: none; } }
+/* keep the slide shorter than the page's side gutter (16px on phones): any further and the card pokes past the screen edge and widens the whole page while the month loads */
+@keyframes month-next { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
+@keyframes month-prev { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: none; } }
 @keyframes vt-out { to { opacity: 0; } }
 @keyframes vt-in { from { opacity: 0; } }
 
