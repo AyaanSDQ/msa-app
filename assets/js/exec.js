@@ -1,6 +1,6 @@
 import { supabase } from "./supabase-client.js";
 import { icon } from "./icons.js?v=11";
-import { TYPE_META, typeBanner, escapeHtml, formatTime, formatDateHeading, formatEventDate, localDateKey, roomLabel } from "./shared.js?v=22";
+import { TYPE_META, typeBanner, escapeHtml, formatTime, formatDateHeading, formatEventDate, localDateKey, roomLabel } from "./shared.js?v=23";
 
 const loginView = document.getElementById("login-view");
 const appView = document.getElementById("app-view");

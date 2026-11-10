@@ -40,10 +40,20 @@ export function formatDateHeading(date) {
   return `${weekday} · ${month} ${date.getDate()}`;
 }
 
-// "Sun, Nov 15" — the actual date of an event.
-export function formatEventDate(ts) {
+// How an event's date reads on a card: "Yesterday", "Today", "Tomorrow", the
+// weekday ("Wednesday") for the rest of the coming week, and otherwise the
+// actual date ("Sun, Nov 15"). Days in the past beyond yesterday use the date
+// too, since a bare weekday would read as upcoming.
+export function formatEventDate(ts, now = new Date()) {
   if (!ts) return "";
-  return new Date(ts).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  const d = new Date(ts);
+  const dayNum = (x) => Date.UTC(x.getFullYear(), x.getMonth(), x.getDate()) / 86400000;
+  const diff = dayNum(d) - dayNum(now);
+  if (diff === 0) return "Today";
+  if (diff === 1) return "Tomorrow";
+  if (diff === -1) return "Yesterday";
+  if (diff >= 2 && diff <= 6) return d.toLocaleDateString(undefined, { weekday: "long" });
+  return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 }
 
 export function isSameLocalDay(a, b) {

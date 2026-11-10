@@ -20,7 +20,7 @@ import {
   badgesHtml,
   dateTileHtml,
   emptyCardHtml,
-} from "./shared.js?v=22";
+} from "./shared.js?v=23";
 
 const PAGE_SIZE = 20;
 const heroEl = document.getElementById("hero");
