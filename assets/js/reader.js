@@ -9,6 +9,8 @@ import {
   formatDateHeading,
   isSameLocalDay,
   localDateKey,
+  effectiveTime,
+  bucketOf,
   formatRelative,
   cancelledBanner,
   roomLabel,
@@ -18,7 +20,7 @@ import {
   badgesHtml,
   dateTileHtml,
   emptyCardHtml,
-} from "./shared.js?v=21";
+} from "./shared.js?v=22";
 
 const PAGE_SIZE = 20;
 const heroEl = document.getElementById("hero");
@@ -26,6 +28,9 @@ const todayEl = document.getElementById("today-posts");
 const todayCountEl = document.getElementById("today-count");
 const historyEl = document.getElementById("history");
 const todaySection = document.getElementById("today-section");
+const upcomingEl = document.getElementById("upcoming-posts");
+const upcomingCountEl = document.getElementById("upcoming-count");
+const upcomingSection = document.getElementById("upcoming-section");
 const historySection = document.getElementById("history-section");
 const loadMoreWrap = document.getElementById("load-more-wrap");
 const loadMoreBtn = document.getElementById("load-more");
@@ -34,13 +39,19 @@ const pageEl = document.getElementById("page");
 const newUpdatePill = document.getElementById("new-update-pill");
 const newUpdatePillBtn = document.getElementById("new-update-pill-btn");
 
-let historyOffset = 0;
+// Posts are placed by the time set on them (event_time), falling back to when
+// they were posted for untimed ones. History pages through two sources (timed
+// and untimed) that are merged by that effective time, so each keeps its own
+// offset.
+let timedOffset = 0;
+let untimedOffset = 0;
 let historyCount = 0; // history cards currently on screen
 let historyDone = false;
 
 // Today's active-post set, kept live so Realtime events can recompute the
 // hero (pickHero needs the whole day's set, not just one changed row).
 let todayRows = [];
+let upcomingRows = [];
 let hasDeferredTodayUpdate = false;
 
 // Realtime events can arrive before the initial fetch finishes; buffer them
@@ -53,13 +64,10 @@ init();
 async function init() {
   setupRealtime();
 
-  const rows = await fetchBatch(0, PAGE_SIZE);
-  historyOffset = rows.length;
-  historyDone = rows.length < PAGE_SIZE;
-
   const now = new Date();
-  todayRows = rows.filter((r) => isSameLocalDay(new Date(r.created_at), now));
-  const historyRows = rows.filter((r) => !isSameLocalDay(new Date(r.created_at), now));
+  const [{ today, upcoming }, historyRows] = await Promise.all([fetchTodayAndUpcoming(now), fetchHistoryPage(now)]);
+  todayRows = today;
+  upcomingRows = upcoming;
 
   renderHistoryBatch(historyRows);
   renderToday(now);
@@ -82,26 +90,61 @@ async function init() {
   maybeScrollToAnchor();
 }
 
-async function fetchBatch(offset, limit) {
-  const { data, error } = await supabase
-    .from("updates")
-    .select("*")
-    .neq("status", "deleted")
-    .order("created_at", { ascending: false })
-    .range(offset, offset + limit - 1);
-  if (error) {
-    console.error("Failed to load updates", error);
-    return [];
+// Exec meetings are hidden from readers by RLS; the filter also keeps them
+// out when an exec views this page while signed in (the exec "View" tab).
+function baseQuery() {
+  return supabase.from("updates").select("*").neq("status", "deleted").neq("type", "exec_meeting");
+}
+
+function dayBounds(now) {
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  return { start: start.toISOString(), end: end.toISOString() };
+}
+
+// Today = timed posts happening today, plus untimed posts made today.
+// Upcoming = timed posts on a later day.
+async function fetchTodayAndUpcoming(now) {
+  const { start, end } = dayBounds(now);
+  const [todayRes, upcomingRes] = await Promise.all([
+    baseQuery().or(`and(event_time.gte.${start},event_time.lt.${end}),and(event_time.is.null,created_at.gte.${start},created_at.lt.${end})`),
+    baseQuery().gte("event_time", end).order("event_time", { ascending: true }).limit(50),
+  ]);
+  if (todayRes.error) console.error("Failed to load today's updates", todayRes.error);
+  if (upcomingRes.error) console.error("Failed to load upcoming updates", upcomingRes.error);
+  return { today: todayRes.data || [], upcoming: upcomingRes.data || [] };
+}
+
+// One page of history (everything whose effective time is before today),
+// newest first. Takes a page's worth from each source, merges them, and only
+// advances each source's offset by how many rows were actually used.
+async function fetchHistoryPage(now) {
+  const { start } = dayBounds(now);
+  const [timedRes, untimedRes] = await Promise.all([
+    baseQuery().lt("event_time", start).order("event_time", { ascending: false }).range(timedOffset, timedOffset + PAGE_SIZE - 1),
+    baseQuery().is("event_time", null).lt("created_at", start).order("created_at", { ascending: false }).range(untimedOffset, untimedOffset + PAGE_SIZE - 1),
+  ]);
+  if (timedRes.error || untimedRes.error) console.error("Failed to load history", timedRes.error || untimedRes.error);
+  const timed = timedRes.data || [];
+  const untimed = untimedRes.data || [];
+
+  const page = [];
+  let t = 0;
+  let u = 0;
+  while (page.length < PAGE_SIZE && (t < timed.length || u < untimed.length)) {
+    const takeTimed = u >= untimed.length || (t < timed.length && new Date(effectiveTime(timed[t])) >= new Date(effectiveTime(untimed[u])));
+    page.push(takeTimed ? timed[t++] : untimed[u++]);
   }
-  return data;
+  timedOffset += t;
+  untimedOffset += u;
+  historyDone = page.length < PAGE_SIZE;
+  return page.sort((a, b) => new Date(effectiveTime(b)) - new Date(effectiveTime(a)) || tiebreak(a, b));
 }
 
 async function handleLoadMore() {
   loadMoreBtn.disabled = true;
   loadMoreBtn.textContent = "Loading…";
-  const rows = await fetchBatch(historyOffset, PAGE_SIZE);
-  historyOffset += rows.length;
-  if (rows.length < PAGE_SIZE) historyDone = true;
+  const rows = await fetchHistoryPage(new Date());
   renderHistoryBatch(rows, { append: true });
   updateLoadMoreVisibility();
   loadMoreBtn.disabled = false;
@@ -113,7 +156,8 @@ function updateLoadMoreVisibility() {
 }
 
 // ── Hero selection ──────────────────────────────────────────────────────
-// Among today's active posts: prefer the soonest still-upcoming event_time
+// "Today" means the time set on the post is today (untimed posts: posted
+// today). Among today's active posts: prefer the soonest still-upcoming event_time
 // ("up next"); if everything scheduled today has already passed, fall back
 // to whichever happened most recently; if nothing has a time at all, fall
 // back to the most recently posted. Cancelled posts never become the hero
@@ -129,14 +173,21 @@ function pickHero(todayRows, now) {
   const withTime = eligible.filter((r) => r.event_time);
   const upcoming = withTime
     .filter((r) => new Date(r.event_time) >= now)
-    .sort((a, b) => new Date(a.event_time) - new Date(b.event_time));
+    .sort((a, b) => new Date(a.event_time) - new Date(b.event_time) || tiebreak(a, b));
   if (upcoming.length) return upcoming[0];
 
-  const past = withTime.sort((a, b) => new Date(b.event_time) - new Date(a.event_time));
+  const past = withTime.sort((a, b) => new Date(b.event_time) - new Date(a.event_time) || tiebreak(a, b));
   if (past.length) return past[0];
 
   const byCreated = [...eligible].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   return byCreated[0];
+}
+
+// Posts with the same effective time: events (prayer/social) come before
+// announcements, then whichever was posted most recently.
+function tiebreak(a, b) {
+  const rank = (r) => (r.type === "announcement" ? 1 : 0);
+  return rank(a) - rank(b) || new Date(b.created_at) - new Date(a.created_at);
 }
 
 function postWeight(r) {
@@ -147,12 +198,17 @@ function renderToday(now) {
   const hero = pickHero(todayRows, now);
   const rest = todayRows
     .filter((r) => r !== hero)
-    .sort((a, b) => postWeight(b) - postWeight(a) || new Date(b.created_at) - new Date(a.created_at));
+    .sort((a, b) => postWeight(b) - postWeight(a) || new Date(effectiveTime(a)) - new Date(effectiveTime(b)) || tiebreak(a, b));
 
   heroEl.innerHTML = hero ? heroCardHtml(hero) : "";
   todayCountEl.textContent = String(rest.length);
   todayEl.innerHTML = rest.map((r) => listCardHtml(r)).join("");
   todaySection.hidden = rest.length === 0;
+
+  const upcoming = [...upcomingRows].sort((a, b) => new Date(a.event_time) - new Date(b.event_time) || tiebreak(a, b));
+  upcomingCountEl.textContent = String(upcoming.length);
+  upcomingEl.innerHTML = upcoming.map((r) => listCardHtml(r)).join("");
+  upcomingSection.hidden = upcoming.length === 0;
   syncEmptyState();
 }
 
@@ -160,7 +216,7 @@ function renderToday(now) {
 function syncEmptyState() {
   const hasHero = !!heroEl.querySelector(".hero-card");
   const hasToday = todayEl.children.length > 0;
-  const hasAnything = hasHero || hasToday || historyCount > 0;
+  const hasAnything = hasHero || hasToday || upcomingEl.children.length > 0 || historyCount > 0;
 
   if (!hasHero) {
     if (!hasAnything) {
@@ -187,11 +243,11 @@ function renderHistoryBatch(rows, { append = false } = {}) {
   let activeKey = lastKey;
 
   for (const row of rows) {
-    const key = localDateKey(row.created_at);
+    const key = localDateKey(effectiveTime(row));
     if (key !== activeKey) {
       const heading = document.createElement("div");
       heading.className = "date-heading";
-      heading.textContent = formatDateHeading(new Date(row.created_at));
+      heading.textContent = formatDateHeading(new Date(effectiveTime(row)));
       historyEl.appendChild(heading);
 
       groupWrap = document.createElement("div");
@@ -441,19 +497,23 @@ function handleRealtimeEvent(payload) {
   else if (row.status === "active") handleActiveArrival(row);
 }
 
+function removeFromSets(id) {
+  todayRows = todayRows.filter((r) => r.id !== id);
+  upcomingRows = upcomingRows.filter((r) => r.id !== id);
+}
+
 function handleActiveArrival(row) {
   const now = new Date();
-  const isToday = isSameLocalDay(new Date(row.created_at), now);
+  const bucket = bucketOf(row, now);
 
-  if (!isToday) {
+  removeFromSets(row.id);
+  if (bucket === "history") {
     const el = document.querySelector(`[data-update-id="${row.id}"]`);
     if (el && historyEl.contains(el)) el.outerHTML = histCardHtml(row);
     return;
   }
 
-  const idx = todayRows.findIndex((r) => r.id === row.id);
-  if (idx >= 0) todayRows[idx] = row;
-  else todayRows.push(row);
+  (bucket === "today" ? todayRows : upcomingRows).push(row);
 
   if (isScrolledNearTop()) {
     renderToday(now);
@@ -465,15 +525,17 @@ function handleActiveArrival(row) {
 
 function handleCancelled(row) {
   const now = new Date();
-  const isToday = isSameLocalDay(new Date(row.created_at), now);
+  const inToday = todayRows.some((r) => r.id === row.id);
+  const inUpcoming = upcomingRows.some((r) => r.id === row.id);
 
-  if (isToday) {
-    const idx = todayRows.findIndex((r) => r.id === row.id);
-    if (idx < 0) return; // not part of the currently-loaded today set
-    const wasHero = pickHero(todayRows, now)?.id === row.id;
-    todayRows[idx] = row;
+  if (inToday || inUpcoming) {
+    const wasHero = inToday && pickHero(todayRows, now)?.id === row.id;
+    removeFromSets(row.id);
+    const bucket = bucketOf(row, now);
+    if (bucket === "today") todayRows.push(row);
+    else if (bucket === "upcoming") upcomingRows.push(row);
 
-    if (wasHero) {
+    if (wasHero || bucket === "history") {
       renderToday(now);
     } else {
       const el = document.querySelector(`[data-update-id="${row.id}"]`);
@@ -488,20 +550,16 @@ function handleCancelled(row) {
 
 function handleDeleted(id) {
   const el = document.querySelector(`[data-update-id="${id}"]`);
-  const todayIdx = todayRows.findIndex((r) => r.id === id);
+  const inSets = todayRows.some((r) => r.id === id) || upcomingRows.some((r) => r.id === id);
 
   if (!el) {
-    if (todayIdx >= 0) todayRows.splice(todayIdx, 1);
+    removeFromSets(id);
     return;
   }
 
-  const wasHero = todayIdx >= 0 && pickHero(todayRows, new Date())?.id === id;
-
   animateRemove(el, () => {
-    const idx = todayRows.findIndex((r) => r.id === id);
-    if (idx >= 0) todayRows.splice(idx, 1);
-
-    if (todayIdx >= 0) renderToday(new Date());
+    removeFromSets(id);
+    if (inSets) renderToday(new Date());
     historyCount = historyEl.querySelectorAll(".hist-card").length;
     syncEmptyState();
   });

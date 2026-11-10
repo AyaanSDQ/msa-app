@@ -67,7 +67,7 @@
           <div class="form-grid">
             <div class="field"><label>Title</label><input class="input" name="title" required></div>
             <div class="field"><label id="location-label">Room number</label><input class="input" name="location"></div>
-            <div class="field"><label>Time</label><input class="input" type="datetime-local" name="event_time"></div>
+            <div class="field"><label>Time <span class="form-hint" id="time-hint">(required)</span></label><input class="input" type="datetime-local" name="event_time"></div>
             <div class="field"><label>Notes</label><textarea class="input" name="notes"></textarea></div>
             <div class="field"><label>Image link <span class="form-hint">(optional banner or flyer)</span></label><input class="input" type="url" name="image_url" placeholder="https://..." autocomplete="off"></div>
             <div class="field">
@@ -129,6 +129,12 @@
 
   </div>
 
+  <!-- Outside #app-view on purpose: that element's entrance animation would trap this fixed bar inside it. -->
+  <nav id="exec-nav" class="bnav" hidden aria-label="Administrative sections">
+      <a href="exec.html" class="bnav-item" aria-current="page"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-case"></use></svg><span>Admins</span></a>
+      <a href="view.html" class="bnav-item"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-mega"></use></svg><span>View</span></a>
+    </nav>
+
   <footer class="app-footer">
     <nav class="footer-links" aria-label="Footer">
       <a href="privacy.html">Privacy Policy</a>
@@ -153,8 +159,8 @@
   });
   document.querySelectorAll(".back-icon").forEach((el) => { el.innerHTML = icon("i-back", { size: 14, stroke: 2.75 }); });
 </script>
-<script type="module" src="assets/js/exec.js?v=29"></script>
-<script src="assets/js/fx.js?v=3" defer></script>
+<script type="module" src="assets/js/exec.js?v=32"></script>
+<script src="assets/js/fx.js?v=4" defer></script>
 <script src="assets/js/sw-register.js?v=1"></script>
 </body>
 </html>

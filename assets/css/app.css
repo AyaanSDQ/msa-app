@@ -1134,7 +1134,6 @@ html { scrollbar-gutter: stable; }
 .bnav { padding: 5px; gap: 4px; border-radius: 26px; transition: transform .32s var(--ease), opacity .24s var(--ease); }
 .bnav-item { min-height: 52px; gap: 3px; border-radius: 21px; font-size: 12px; }
 .bnav-item svg { width: 22px; height: 22px; }
-.bnav.is-hidden { transform: translateX(-50%) translateY(calc(100% + 28px)); opacity: 0; pointer-events: none; }
 
 /* ═══════════ Calendar, quieter still ═══════════ */
 

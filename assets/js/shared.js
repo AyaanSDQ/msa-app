@@ -50,6 +50,23 @@ export function isSameLocalDay(a, b) {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
 
+// The moment a post is "about": the time set on it, or (for untimed posts like
+// plain announcements) when it was posted. Everything that sorts or groups
+// posts by day uses this, not created_at.
+export function effectiveTime(update) {
+  return update.event_time || update.created_at;
+}
+
+// Which feed section a post belongs in, judged by its effective time.
+export function bucketOf(update, now = new Date()) {
+  const t = new Date(effectiveTime(update));
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startTomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  if (t < startToday) return "history";
+  if (t < startTomorrow) return "today";
+  return "upcoming";
+}
+
 export function localDateKey(ts) {
   const d = new Date(ts);
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;

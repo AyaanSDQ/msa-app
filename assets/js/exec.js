@@ -1,6 +1,6 @@
 import { supabase } from "./supabase-client.js";
 import { icon } from "./icons.js?v=11";
-import { TYPE_META, typeBanner, escapeHtml, formatTime, formatDateHeading, formatEventDate, localDateKey, roomLabel } from "./shared.js?v=21";
+import { TYPE_META, typeBanner, escapeHtml, formatTime, formatDateHeading, formatEventDate, localDateKey, roomLabel } from "./shared.js?v=22";
 
 const loginView = document.getElementById("login-view");
 const appView = document.getElementById("app-view");
@@ -16,6 +16,9 @@ const typeGrid = document.getElementById("type-grid");
 const locationLabel = document.getElementById("location-label");
 const formError = document.getElementById("form-error");
 const discardBtn = document.getElementById("discard-btn");
+const execNav = document.getElementById("exec-nav");
+const submitBtn = postForm.querySelector('button[type="submit"]');
+const timeHint = document.getElementById("time-hint");
 
 const listView = document.getElementById("list-view");
 const listEl = document.getElementById("events-list");
@@ -65,6 +68,7 @@ async function renderForSession(session) {
     currentUserId = null;
     loginView.hidden = false;
     appView.hidden = true;
+    execNav.hidden = true;
     teardownRealtime();
     return;
   }
@@ -124,11 +128,13 @@ function applyExecRealtimeRow(row) {
 function showListView() {
   listView.hidden = false;
   detailView.hidden = true;
+  execNav.hidden = false;
 }
 
 function showDetailView() {
   listView.hidden = true;
   detailView.hidden = false;
+  execNav.hidden = true;
 }
 
 // ── Login ────────────────────────────────────────────────────────────────
@@ -192,6 +198,8 @@ async function loadEventsAndHeader() {
     feedbackCounts.set(row.update_id, (feedbackCounts.get(row.update_id) || 0) + 1);
   }
 
+  // Execs see posts in the order they were created (their edit history), not
+  // by the event time that readers see.
   listEl.innerHTML = (updates || []).length
     ? (updates || []).map((u) => execCardHtml(u, feedbackCounts.get(u.id) || 0)).join("")
     : `<div class="empty-state">${icon("i-inbox", { size: 22, stroke: 2.75 })}<div class="title">No events posted yet.</div></div>`;
@@ -240,7 +248,7 @@ function execCardHtml(update, feedbackCount) {
 
 function execMetaLine(update, feedbackCount) {
   const parts = [];
-  const isToday = localDateKey(update.created_at) === localDateKey(new Date());
+  const isToday = !!update.event_time && localDateKey(update.event_time) === localDateKey(new Date());
   if (update.event_time) {
     parts.push(`${isToday ? "Today" : formatDateHeading(new Date(update.event_time))} ${formatTime(update.event_time)}`);
   } else {
@@ -257,7 +265,22 @@ function execMetaLine(update, feedbackCount) {
 
 // ── New post form ────────────────────────────────────────────────────────
 
+// Prayer, Social and Exec meeting posts need a time; announcements don't.
+// Until a required time is set the submit button is faded out and reads
+// "Set time"; once set (or for announcements) it's the normal "Post update".
+function syncSubmitState() {
+  const needsTime = selectedType !== "announcement";
+  const blocked = needsTime && !postForm.event_time.value;
+  submitBtn.disabled = blocked;
+  submitBtn.textContent = blocked ? "Set time" : "Post update";
+  timeHint.textContent = needsTime ? "(required)" : "(optional)";
+}
+
 function wireNewPostForm() {
+  postForm.event_time.addEventListener("input", syncSubmitState);
+  postForm.event_time.addEventListener("change", syncSubmitState);
+  syncSubmitState();
+
   newPostToggle.addEventListener("click", () => {
     const willOpen = !postForm.classList.contains("open");
     postForm.classList.toggle("open", willOpen);
@@ -276,12 +299,12 @@ function wireNewPostForm() {
     selectedType = btn.dataset.type;
     typeGrid.querySelectorAll(".type-option").forEach((b) => b.classList.toggle("selected", b === btn));
     locationLabel.textContent = "Room number";
+    syncSubmitState();
   });
 
   postForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     formError.hidden = true;
-    const submitBtn = postForm.querySelector('button[type="submit"]');
     submitBtn.disabled = true;
 
     const title = postForm.title.value.trim();
@@ -293,7 +316,13 @@ function wireNewPostForm() {
     if (!title) {
       formError.textContent = "Title is required.";
       formError.hidden = false;
-      submitBtn.disabled = false;
+      syncSubmitState();
+      return;
+    }
+    if (selectedType !== "announcement" && !timeValue) {
+      formError.textContent = "Set a time for this post.";
+      formError.hidden = false;
+      syncSubmitState();
       return;
     }
 
@@ -318,7 +347,7 @@ function wireNewPostForm() {
 
     const { error } = await supabase.from("updates").insert(payload);
 
-    submitBtn.disabled = false;
+    syncSubmitState();
 
     if (error) {
       console.error("Post failed", error);
@@ -333,6 +362,7 @@ function wireNewPostForm() {
     selectedType = "prayer";
     typeGrid.querySelectorAll(".type-option").forEach((b) => b.classList.toggle("selected", b.dataset.type === "prayer"));
     locationLabel.textContent = "Room number";
+    syncSubmitState();
     postForm.classList.remove("open");
     newPostChev.classList.add("collapsed");
     loadEventsAndHeader();
