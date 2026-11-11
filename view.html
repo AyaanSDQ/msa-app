@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex">
 <title>View — Ummah</title>
 <meta name="description" content="Updates, room numbers and events.">
-<link rel="stylesheet" href="assets/css/app.css?v=98">
+<link rel="stylesheet" href="assets/css/app.css?v=106">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/svg+xml" href="assets/icons/logo.svg">
 <link rel="icon" href="assets/icons/icon-192.png">
@@ -23,6 +23,7 @@
 <div class="app">
   <header class="app-header masthead">
     <div class="app-title" aria-label="Ummah"><span class="app-name">Ummah</span></div>
+    <button type="button" id="view-logout" class="logout-pill" hidden>Log out</button>
   </header>
 
 
@@ -77,9 +78,19 @@
   // Exec-side preview of the public Updates page: signed-in execs only.
   import { supabase } from "./assets/js/supabase-client.js";
   const { data } = await supabase.auth.getSession();
-  if (!data.session) location.replace("exec.html");
+  if (!data.session) {
+    location.replace("exec.html");
+  } else {
+    // The Log out link only exists here, for signed-in admins.
+    const logout = document.getElementById("view-logout");
+    logout.hidden = false;
+    logout.addEventListener("click", async () => {
+      await supabase.auth.signOut();
+      location.href = "index.html";
+    });
+  }
 </script>
-<script type="module" src="assets/js/reader.js?v=32"></script>
+<script type="module" src="assets/js/reader.js?v=36"></script>
 <script src="assets/js/fx.js?v=4" defer></script>
 <script src="assets/js/sw-register.js?v=1"></script>
 </body>

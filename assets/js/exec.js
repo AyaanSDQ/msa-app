@@ -243,7 +243,7 @@ function execCardHtml(update) {
   const body = `
     <div class="list-icon" style="color:var(--type-${update.type}-icon)">${icon(meta.iconId, { size: 22 })}</div>
     <div class="list-body">
-      <div class="list-kicker" style="color:var(--type-${update.type}-icon)"><i></i>${meta.label}${pinned}</div>
+      <div class="list-kicker" style="color:var(--type-${update.type}-icon);--c:var(--type-${update.type}-hero)"><i></i>${meta.label}${pinned}</div>
       <div class="list-title">${escapeHtml(update.title)}</div>
       <div class="list-meta">${execMetaLine(update)}</div>
     </div>

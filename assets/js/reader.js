@@ -54,6 +54,9 @@ let upcomingRows = [];
 // Pinned posts (any date, any number) sit at the top as hero cards and are
 // kept out of every other list.
 let pinnedRows = [];
+// Cancelled posts (pinned or not) all sit above everything else in their own
+// "cancelled hero" cards and are kept out of every other list.
+let cancelledRows = [];
 let hasDeferredTodayUpdate = false;
 
 // Realtime events can arrive before the initial fetch finishes; buffer them
@@ -67,10 +70,11 @@ async function init() {
   setupRealtime();
 
   const now = new Date();
-  const [{ today, upcoming }, historyRows, pinned] = await Promise.all([fetchTodayAndUpcoming(now), fetchHistoryPage(now), fetchPinned()]);
+  const [{ today, upcoming }, historyRows, pinned, cancelled] = await Promise.all([fetchTodayAndUpcoming(now), fetchHistoryPage(now), fetchPinned(), fetchCancelled()]);
   todayRows = today;
   upcomingRows = upcoming;
   pinnedRows = pinned;
+  cancelledRows = cancelled;
 
   renderHistoryBatch(historyRows);
   renderToday(now);
@@ -114,15 +118,33 @@ async function fetchTodayAndUpcoming(now) {
   ]);
   if (todayRes.error) console.error("Failed to load today's updates", todayRes.error);
   if (upcomingRes.error) console.error("Failed to load upcoming updates", upcomingRes.error);
-  return { today: (todayRes.data || []).filter((r) => !r.pinned), upcoming: (upcomingRes.data || []).filter((r) => !r.pinned) };
+  const regular = (r) => !r.pinned && r.status !== "cancelled";
+  return { today: (todayRes.data || []).filter(regular), upcoming: (upcomingRes.data || []).filter(regular) };
 }
 
-// Every pinned post, whatever its date. Cancelled ones stay where they are
-// (with their Cancelled strip); deleted ones are already excluded.
+// Every active pinned post, whatever its date. (A cancelled pinned post is
+// shown as a cancelled card instead.)
 async function fetchPinned() {
   const { data, error } = await baseQuery().eq("pinned", true);
   if (error) console.error("Failed to load pinned updates", error);
-  return sortPinned(data || []);
+  return sortPinned((data || []).filter((r) => r.status === "active"));
+}
+
+// Every cancelled post, whatever its date or pin state.
+async function fetchCancelled() {
+  const { data, error } = await baseQuery().eq("status", "cancelled");
+  if (error) console.error("Failed to load cancelled updates", error);
+  return sortCancelled(data || []);
+}
+
+// Cancellations still ahead come first (soonest first), then past ones (most
+// recent first).
+function sortCancelled(rows) {
+  const now = Date.now();
+  const t = (r) => new Date(effectiveTime(r)).getTime();
+  const ahead = rows.filter((r) => t(r) >= now).sort((a, b) => t(a) - t(b));
+  const past = rows.filter((r) => t(r) < now).sort((a, b) => t(b) - t(a));
+  return [...ahead, ...past];
 }
 
 function sortPinned(rows) {
@@ -152,9 +174,9 @@ async function fetchHistoryPage(now) {
   timedOffset += t;
   untimedOffset += u;
   historyDone = page.length < PAGE_SIZE;
-  // Pinned posts live at the top; they are skipped here but still counted in
-  // the offsets above, so paging stays stable.
-  return page.filter((r) => !r.pinned).sort((a, b) => new Date(effectiveTime(b)) - new Date(effectiveTime(a)) || tiebreak(a, b));
+  // Pinned and cancelled posts live at the top; they are skipped here but still
+  // counted in the offsets above, so paging stays stable.
+  return page.filter((r) => !r.pinned && r.status !== "cancelled").sort((a, b) => new Date(effectiveTime(b)) - new Date(effectiveTime(a)) || tiebreak(a, b));
 }
 
 async function handleLoadMore() {
@@ -216,7 +238,10 @@ function renderToday(now) {
     .filter((r) => r !== hero)
     .sort((a, b) => postWeight(b) - postWeight(a) || new Date(effectiveTime(a)) - new Date(effectiveTime(b)) || tiebreak(a, b));
 
-  heroEl.innerHTML = sortPinned(pinnedRows).map(heroCardHtml).join("") + (hero ? heroCardHtml(hero) : "");
+  heroEl.innerHTML =
+    sortCancelled(cancelledRows).map(cancelHeroHtml).join("") +
+    sortPinned(pinnedRows).map(heroCardHtml).join("") +
+    (hero ? heroCardHtml(hero) : "");
   todayCountEl.textContent = String(rest.length);
   todayEl.innerHTML = rest.map((r) => listCardHtml(r)).join("");
   todaySection.hidden = rest.length === 0;
@@ -280,14 +305,36 @@ function renderHistoryBatch(rows, { append = false } = {}) {
 
 function heroCardHtml(update) {
   const meta = TYPE_META[update.type];
-  const cancelled = update.status === "cancelled";
   const upcoming = update.event_time && new Date(update.event_time) > new Date();
-  const status = !cancelled && !badgesHtml(update) && upcoming ? `<span class="badge badge-soon">Up next</span>` : "";
+  const status = !badgesHtml(update) && upcoming ? `<span class="badge badge-soon">Up next</span>` : "";
   const badges = `<div class="hero-badges">${badgesHtml(update)}${status}</div>`;
   const media = `<div class="hero-media is-pattern"><span class="hero-media-icon">${icon(meta.iconId, { size: 24 })}</span>${badges}</div>`;
   return `
-  <article class="hero-card hero-v2${cancelled ? " is-cancelled" : ""}" style="--c:var(--type-${update.type}-hero)" data-update-id="${update.id}">
-    ${cancelled ? cancelledBanner(update.cancel_reason) : ""}
+  <article class="hero-card hero-v2" style="--c:var(--type-${update.type}-hero)" data-update-id="${update.id}">
+    ${media}
+    <div class="hero-body">
+      <div class="hero-eyebrow"><span class="hero-type"><i></i>${meta.label}</span></div>
+      <h2 class="hero-title">${escapeHtml(update.title)}</h2>
+      ${chipsHtml(update)}
+      ${update.body ? `<p class="hero-notes">${escapeHtml(update.body)}</p>` : ""}
+      <div class="hero-footer" data-updated-at="${update.created_at}">
+        <span class="updated-text">${formatRelative(update.created_at)}</span>
+      </div>
+    </div>
+  </article>`;
+}
+
+// A cancelled post, whatever its pin state. It is the normal hero card (same
+// banner colour, type, title, chips) with two changes: a red tape across the top
+// saying "Cancelled - reason", and a ban icon in the banner. Always shown above every other card.
+function cancelHeroHtml(update) {
+  const meta = TYPE_META[update.type];
+  const badges = `<div class="hero-badges">${badgesHtml(update)}</div>`;
+  const tape = `<div class="cancel-tape">${icon("i-ban", { size: 15 })}<p><b>Cancelled</b>${update.cancel_reason ? ` <span>-</span> ${escapeHtml(update.cancel_reason)}` : ""}</p></div>`;
+  const media = `<div class="hero-media is-pattern"><span class="hero-media-icon">${icon("i-ban", { size: 24 })}</span>${badges}</div>`;
+  return `
+  <article class="hero-card hero-v2 is-cancelled" style="--c:var(--type-${update.type}-hero)" data-update-id="${update.id}">
+    ${tape}
     ${media}
     <div class="hero-body">
       <div class="hero-eyebrow"><span class="hero-type"><i></i>${meta.label}</span></div>
@@ -409,8 +456,8 @@ function handleRealtimeEvent(payload) {
   const row = payload.new;
   if (!row || row.type === "exec_meeting") return; // RLS already blocks this for anon; defensive only
   if (row.status === "deleted") handleDeleted(row.id);
-  else if (row.pinned) handlePinned(row);
   else if (row.status === "cancelled") handleCancelled(row);
+  else if (row.pinned) handlePinned(row);
   else if (row.status === "active") handleActiveArrival(row);
 }
 
@@ -418,9 +465,10 @@ function removeFromSets(id) {
   todayRows = todayRows.filter((r) => r.id !== id);
   upcomingRows = upcomingRows.filter((r) => r.id !== id);
   pinnedRows = pinnedRows.filter((r) => r.id !== id);
+  cancelledRows = cancelledRows.filter((r) => r.id !== id);
 }
 
-// A post that was in the Earlier list has just been pinned: take its card (and
+// A post that was in the Earlier list has just been pinned or cancelled: take its card (and
 // its date heading, if it was the only one that day) out of that list.
 function removeHistoryCard(id) {
   const el = historyEl.querySelector(`[data-update-id="${id}"]`);
@@ -446,9 +494,9 @@ async function reloadHistory() {
   syncEmptyState();
 }
 
-// Pinned posts: shown at the top, in any state except deleted. A change to a
-// post that is already pinned (cancelled, edited notes) updates its card in
-// place; a newly pinned post moves up from wherever it was.
+// Pinned posts: shown at the top. A change to a post that is already pinned
+// (edited notes) updates its card in place; a newly pinned post moves up from
+// wherever it was.
 function handlePinned(row) {
   const now = new Date();
   const el = heroEl.querySelector(`[data-update-id="${row.id}"]`);
@@ -461,7 +509,29 @@ function handlePinned(row) {
   removeFromSets(row.id);
   removeHistoryCard(row.id);
   pinnedRows.push(row);
+  showTopChange(now);
+}
 
+// Cancelled posts: pulled out of whatever list they were in and shown as a
+// cancelled card at the very top, pinned or not.
+function handleCancelled(row) {
+  const now = new Date();
+  const el = heroEl.querySelector(`[data-update-id="${row.id}"]`);
+  if (el && cancelledRows.some((r) => r.id === row.id)) {
+    cancelledRows = cancelledRows.map((r) => (r.id === row.id ? row : r));
+    el.outerHTML = cancelHeroHtml(row);
+    return;
+  }
+
+  removeFromSets(row.id);
+  removeHistoryCard(row.id);
+  cancelledRows.push(row);
+  showTopChange(now);
+}
+
+// Changes at the top of the page reflow everything below, so they wait behind
+// the "New update" pill unless the reader is already near the top.
+function showTopChange(now) {
   if (isScrolledNearTop()) {
     renderToday(now);
   } else {
@@ -473,12 +543,12 @@ function handlePinned(row) {
 function handleActiveArrival(row) {
   const now = new Date();
   const bucket = bucketOf(row, now);
-  const wasPinned = pinnedRows.some((r) => r.id === row.id);
+  const wasOnTop = pinnedRows.some((r) => r.id === row.id) || cancelledRows.some((r) => r.id === row.id);
 
   removeFromSets(row.id);
   if (bucket === "history") {
-    if (wasPinned) {
-      // just unpinned: back into the Earlier list at its place
+    if (wasOnTop) {
+      // just unpinned or restored: back into the Earlier list at its place
       renderToday(now);
       reloadHistory();
       return;
@@ -490,7 +560,7 @@ function handleActiveArrival(row) {
 
   (bucket === "today" ? todayRows : upcomingRows).push(row);
 
-  if (wasPinned || isScrolledNearTop()) {
+  if (wasOnTop || isScrolledNearTop()) {
     renderToday(now);
   } else {
     hasDeferredTodayUpdate = true;
@@ -498,37 +568,9 @@ function handleActiveArrival(row) {
   }
 }
 
-function handleCancelled(row) {
-  const now = new Date();
-  const wasPinned = pinnedRows.some((r) => r.id === row.id);
-  const inToday = todayRows.some((r) => r.id === row.id);
-  const inUpcoming = upcomingRows.some((r) => r.id === row.id);
-
-  if (wasPinned || inToday || inUpcoming) {
-    const wasHero = inToday && pickHero(todayRows, now)?.id === row.id;
-    removeFromSets(row.id);
-    const bucket = bucketOf(row, now);
-    if (bucket === "today") todayRows.push(row);
-    else if (bucket === "upcoming") upcomingRows.push(row);
-
-    if (wasPinned || wasHero || bucket === "history") {
-      renderToday(now);
-      if (wasPinned && bucket === "history") reloadHistory();
-    } else {
-      // Same spot in the same list, just marked cancelled.
-      const el = document.querySelector(`[data-update-id="${row.id}"]`);
-      if (el) el.outerHTML = listCardHtml(row);
-    }
-    return;
-  }
-
-  const el = document.querySelector(`[data-update-id="${row.id}"]`);
-  if (el) el.outerHTML = histCardHtml(row);
-}
-
 function handleDeleted(id) {
   const el = document.querySelector(`[data-update-id="${id}"]`);
-  const inSets = todayRows.some((r) => r.id === id) || upcomingRows.some((r) => r.id === id) || pinnedRows.some((r) => r.id === id);
+  const inSets = [todayRows, upcomingRows, pinnedRows, cancelledRows].some((list) => list.some((r) => r.id === id));
 
   if (!el) {
     removeFromSets(id);
