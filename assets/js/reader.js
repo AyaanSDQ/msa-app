@@ -193,15 +193,22 @@ function updateLoadMoreVisibility() {
   loadMoreWrap.hidden = historyDone;
 }
 
+// Post types that normally qualify as the featured "today" card (besides Important/Urgent posts).
+const HERO_TYPES = new Set(["prayer"]);
+
 // ── Hero selection ──────────────────────────────────────────────────────
 // "Today" means the time set on the post is today (untimed posts: posted
-// today). Among today's active posts: prefer the soonest still-upcoming event_time
+// today). Among today's active prayers (and Important/Urgent posts): prefer the soonest still-upcoming event_time
 // ("up next"); if everything scheduled today has already passed, fall back
 // to whichever happened most recently; if nothing has a time at all, fall
 // back to the most recently posted. Cancelled posts never become the hero
 // (spec §12) but still render in "today's other posts" with their badge.
-function pickHero(todayRows, now) {
-  const eligible = todayRows.filter((r) => r.status === "active");
+// By default only prayers, or posts flagged Important/Urgent, can be the featured
+// card; social events and ordinary announcements are listed under "More today".
+// With anyType (the page would otherwise have no hero card at all) any active post
+// from today can step in.
+function pickHero(todayRows, now, anyType = false) {
+  const eligible = todayRows.filter((r) => r.status === "active" && (anyType || HERO_TYPES.has(r.type) || postWeight(r) > 0));
   if (eligible.length === 0) return null;
 
   // High-priority posts take the featured spot (pinned posts are shown above).
@@ -233,7 +240,11 @@ function postWeight(r) {
 }
 
 function renderToday(now) {
-  const hero = pickHero(todayRows, now);
+  // The soonest post of any type only steps in when nothing else would be a hero
+  // card (no pinned, no cancelled, no prayer or flagged post), so there is always
+  // at least one when anything is happening today.
+  let hero = pickHero(todayRows, now);
+  if (!hero && pinnedRows.length === 0 && cancelledRows.length === 0) hero = pickHero(todayRows, now, true);
   const rest = todayRows
     .filter((r) => r !== hero)
     .sort((a, b) => postWeight(b) - postWeight(a) || new Date(effectiveTime(a)) - new Date(effectiveTime(b)) || tiebreak(a, b));

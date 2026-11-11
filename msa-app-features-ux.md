@@ -8,7 +8,7 @@ Builds on `msa-app-spec.md`. This document covers product behavior, not implemen
 
 ### Everyone (no login required)
 
-- View the **hero card**: the single soonest active, non-cancelled, non-deleted post (prayer or event), rendered from a type-specific template.
+- View the **hero card**: the soonest active prayer today (or an Important/Urgent post of any type), rendered from a type-specific template. Social events and ordinary announcements are listed under "More today" instead. Pinned and cancelled posts get their own hero cards above it. If there is no pinned, cancelled, prayer or flagged post, the soonest post today steps in so there is always a hero card when something is on.
 - View **today's other posts** section (everything else posted for today besides the hero); shows a defined empty state if none exist.
 - View **history**: all past posts, grouped by date with headers, paginated via "Load more" rather than one unbounded list.
 - See a **relative "last updated" timestamp** on every post ("Updated 12 minutes ago").
