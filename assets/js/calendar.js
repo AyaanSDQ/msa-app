@@ -1,7 +1,7 @@
 import { supabase } from "./supabase-client.js";
 import { icon } from "./icons.js?v=13";
 import { TYPE_META, escapeHtml, formatTime, roomLabel, emptyCardHtml, animateRemove } from "./shared.js?v=25";
-import { expandSeries, describeRule } from "./recurrence.js?v=1";
+import { expandSeries, describeRule } from "./recurrence.js?v=2";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];

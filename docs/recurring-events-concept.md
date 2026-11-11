@@ -23,8 +23,6 @@ Choosing anything other than "Does not repeat" reveals a short, inline panel (no
 | Does not repeat | none | Today's behaviour. |
 | Daily | none | Every day at the post's time. |
 | Weekly | day-of-week chips (S M T W T F S), the weekday of the first date is pre-selected | Every selected weekday. |
-| Monthly | "On day 14" (default: the first date's day) or "On the second Friday" | The same date, or the same weekday slot, each month. A day that does not exist in a short month (the 31st) uses the last day of that month. |
-| Custom | "Every [ 2 ] [ weeks v ]" plus the weekday chips when the unit is weeks | Any interval of days, weeks or months. |
 
 Below the repeat choice, two more fields appear:
 
@@ -70,7 +68,7 @@ All three phases are built. The final design is simpler than the two-table propo
 
 | column | holds |
 |---|---|
-| `recurrence` | the rule: `freq` (daily, weekly, monthly), `interval`, `weekdays` (weekly), `monthly` (`{mode:"day",day}` or `{mode:"nth",nth,weekday}`, nth 5 = last), `start`, `time`, `ends` (`never`, `on` a date, or `count`), and `changes` (the "this and all future" edits, each with a `from` date) |
+| `recurrence` | the rule: `freq` (daily or weekly), `interval` (always 1 from the form), `weekdays` (weekly), `start`, `time`, `ends` (`never`, `on` a date, or `count`), and `changes` (the "this and all future" edits, each with a `from` date) |
 | `occurrence_overrides` | the few single dates an admin changed, keyed `"YYYY-MM-DD"`: `status` (`cancelled` or `deleted`), `cancel_reason`, and optional `title`, `location`, `body`, `time` |
 
 Dates are local calendar dates and times are local `HH:MM`, so "7:00 PM" stays 7:00 PM across daylight saving. The series row's own `event_time` is its first date, which keeps it sortable and keeps old code paths working. Pin and priority belong to the series.
@@ -87,7 +85,7 @@ Why not insert 52 rows for a year? Editing "all future" would mean rewriting eve
 
 ## Where it shows
 
-- **Admin:** the New post form has the Repeat control (Daily, Weekly with day chips, Monthly with day or nth weekday, Custom every N days, weeks or months; Ends never, on a date, or after N times) with a live one-line summary. The list shows one card per series with a small "Repeats" mark, the rule, the next date and a "N changes" count. The detail page has a Dates strip (the last two and the next eight dates), and Edit, Cancel and Delete ask which dates they apply to.
+- **Admin:** the New post form has the Repeat control (Daily or Weekly with day chips; Ends never, on a date, or after N times) with a live one-line summary. The list shows one card per series with a small "Repeats" mark, the rule, the next date and a "N changes" count. The detail page has a Dates strip (the last two and the next eight dates), and Edit, Cancel and Delete ask which dates they apply to.
 - **Readers:** the calendar, Updates page and history show each occurrence on its own date with a small repeat mark. A cancelled date becomes a cancelled hero card for that date only. A pinned series shows its next date.
 
 ## Notifications
@@ -103,11 +101,11 @@ Why not insert 52 rows for a year? Editing "all future" would mean rewriting eve
 2. **A series with no end:** every expansion is bounded (a month, 180 days ahead, a year of history), so "Never" is safe.
 3. **Deleting a series:** the same soft delete as posts today (`status = deleted`), with the same slide-out; every occurrence disappears everywhere at once.
 4. **Pin and priority:** apply to the series. Overrides cover title, room, notes and time only.
-5. **Date edge cases:** monthly on the 29th to 31st falls back to the last day of shorter months.
+5. **Monthly and custom intervals:** deliberately not offered. The weekly and daily options cover the club's real schedule.
 6. **Row-level security:** unchanged. The new columns sit on `updates`, so readers can select and active executives can write.
 
 ## Build order (all done)
 
 1. **Phase 1, repeat rules:** Daily, Weekly, "ends on / never"; the form control, expansion on the calendar and Updates page, delete whole series.
 2. **Phase 2, exceptions:** cancel or delete a single occurrence, the scope choices and the Dates strip.
-3. **Phase 3, the rest:** Monthly, Custom intervals, "After N times", "This and all future", per-occurrence overrides, notification wording.
+3. **Phase 3, the rest:** "After N times", "This and all future", per-occurrence overrides, notification wording. (Monthly and Custom repeats were built, then removed because they will not be used.)

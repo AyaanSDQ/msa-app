@@ -21,7 +21,7 @@ import {
   emptyCardHtml,
   animateRemove,
 } from "./shared.js?v=25";
-import { expandSeries, nextActive, describeRule, parseKey, addDays, startOfDay } from "./recurrence.js?v=1";
+import { expandSeries, nextActive, describeRule, parseKey, addDays, startOfDay } from "./recurrence.js?v=2";
 
 const PAGE_SIZE = 20;
 const heroEl = document.getElementById("hero");

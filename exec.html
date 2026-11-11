@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ummah — Administrative</title>
-<link rel="stylesheet" href="assets/css/app.css?v=109">
+<link rel="stylesheet" href="assets/css/app.css?v=113">
 <link rel="icon" type="image/svg+xml" href="assets/icons/logo.svg">
 <link rel="icon" href="assets/icons/icon-192.png">
 <meta name="theme-color" content="#5b2e91">
@@ -78,19 +78,8 @@
                 <option value="none">Does not repeat</option>
                 <option value="daily">Daily</option>
                 <option value="weekly">Weekly</option>
-                <option value="monthly">Monthly</option>
-                <option value="custom">Custom…</option>
               </select>
               <div id="repeat-panel" class="repeat-panel" hidden>
-                <div id="rep-custom" class="repeat-row" hidden>
-                  <span>Every</span>
-                  <input id="rep-interval" class="input input-sm" type="number" min="1" max="99" value="2" inputmode="numeric" aria-label="Repeat interval">
-                  <select id="rep-unit" class="input input-sm" aria-label="Repeat unit">
-                    <option value="daily">days</option>
-                    <option value="weekly">weeks</option>
-                    <option value="monthly">months</option>
-                  </select>
-                </div>
                 <div id="rep-days" class="repeat-days" role="group" aria-label="Days of the week" hidden>
                   <button type="button" class="day-chip" data-day="0" aria-pressed="false" aria-label="Sunday">S</button>
                   <button type="button" class="day-chip" data-day="1" aria-pressed="false" aria-label="Monday">M</button>
@@ -99,9 +88,6 @@
                   <button type="button" class="day-chip" data-day="4" aria-pressed="false" aria-label="Thursday">T</button>
                   <button type="button" class="day-chip" data-day="5" aria-pressed="false" aria-label="Friday">F</button>
                   <button type="button" class="day-chip" data-day="6" aria-pressed="false" aria-label="Saturday">S</button>
-                </div>
-                <div id="rep-monthly" class="repeat-row" hidden>
-                  <select id="rep-monthly-mode" class="input input-sm" aria-label="Day of the month"></select>
                 </div>
                 <div class="repeat-row">
                   <span>Ends</span>
@@ -240,7 +226,7 @@
   });
   document.querySelectorAll(".back-icon").forEach((el) => { el.innerHTML = icon("i-back", { size: 14, stroke: 2.75 }); });
 </script>
-<script type="module" src="assets/js/exec.js?v=39"></script>
+<script type="module" src="assets/js/exec.js?v=43"></script>
 <script src="assets/js/fx.js?v=4" defer></script>
 <script src="assets/js/sw-register.js?v=1"></script>
 </body>

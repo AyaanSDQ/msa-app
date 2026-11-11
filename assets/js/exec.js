@@ -3,8 +3,9 @@ import { icon } from "./icons.js?v=13";
 import {
   describeRule, describeEnds, expandSeries, nextActive, effectiveFields, endBefore, withChange, firstOccurrence,
   isFirstOccurrence, overrideCount, parseKey, dateKey, addDays, startOfDay,
-} from "./recurrence.js?v=1";
-import { setupRepeat } from "./exec-repeat.js?v=1";
+} from "./recurrence.js?v=2";
+import { setupRepeat } from "./exec-repeat.js?v=2";
+import { enhancePickers } from "./datetime-picker.js?v=5";
 import { TYPE_META, escapeHtml, formatTime, formatDateHeading, formatEventDate, localDateKey, roomLabel, cancelledBanner, animateRemove } from "./shared.js?v=25";
 
 const loginView = document.getElementById("login-view");
@@ -320,6 +321,7 @@ function syncSubmitState() {
 }
 
 function wireNewPostForm() {
+  enhancePickers(document); // computers get the app's own date and time picker
   repeatCtl = setupRepeat(postForm);
   postForm.event_time.addEventListener("input", syncSubmitState);
   postForm.event_time.addEventListener("change", syncSubmitState);

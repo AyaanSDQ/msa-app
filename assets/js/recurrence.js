@@ -7,10 +7,9 @@
 //
 // recurrence = {
 //   v: 1,
-//   freq: "daily" | "weekly" | "monthly",
-//   interval: 1,                       // every N days / weeks / months
+//   freq: "daily" | "weekly",
+//   interval: 1,                       // every N days / weeks (the form always uses 1)
 //   weekdays: [1, 3, 5],               // weekly: 0 = Sunday .. 6 = Saturday
-//   monthly: { mode: "day", day: 14 } | { mode: "nth", nth: 2, weekday: 5 },   // nth 5 = last
 //   start: "2026-11-17",               // first date (local)
 //   time: "19:00",                     // local time of day
 //   ends: { type: "never" } | { type: "on", date: "2026-12-19" } | { type: "count", count: 10 },
@@ -23,7 +22,6 @@
 
 export const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 export const WEEKDAY_LONG = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const NTH_LABEL = { 1: "1st", 2: "2nd", 3: "3rd", 4: "4th", 5: "last" };
 const MAX_STEPS = 20000; // hard stop for runaway rules
 
 const pad = (n) => String(n).padStart(2, "0");
@@ -45,16 +43,6 @@ export function startOfDay(d) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
-// The date of the nth weekday of a month (nth 5 = the last one).
-function nthWeekday(year, month, weekday, nth) {
-  if (nth >= 5) {
-    const last = new Date(year, month + 1, 0);
-    return new Date(year, month, last.getDate() - ((last.getDay() - weekday + 7) % 7));
-  }
-  const first = new Date(year, month, 1);
-  return new Date(year, month, 1 + ((weekday - first.getDay() + 7) % 7) + (nth - 1) * 7);
-}
-
 // Every date the rule produces, oldest first, forever (callers stop reading).
 function* candidates(rule) {
   const start = parseKey(rule.start);
@@ -69,17 +57,6 @@ function* candidates(rule) {
         const d = addDays(base, wd);
         if (d >= start) yield d;
       }
-    }
-  } else if (rule.freq === "monthly") {
-    const m = rule.monthly || { mode: "day", day: start.getDate() };
-    for (let i = 0; ; i += 1) {
-      const idx = start.getMonth() + i * interval;
-      const year = start.getFullYear() + Math.floor(idx / 12);
-      const month = ((idx % 12) + 12) % 12;
-      const d = m.mode === "nth"
-        ? nthWeekday(year, month, m.weekday, m.nth)
-        : new Date(year, month, Math.min(m.day, new Date(year, month + 1, 0).getDate()));
-      if (d >= start) yield d;
     }
   } else {
     for (let k = 0; ; k += 1) yield addDays(start, k * interval);
@@ -176,18 +153,13 @@ function shortDate(key) {
   return parseKey(key).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-// "Daily", "Weekly · Mon, Wed", "Every 2 weeks · Fri", "Monthly · 2nd Fri"
+// "Daily", "Weekly · Mon, Wed", "Every 2 weeks · Fri"
 export function describeRule(rule) {
   if (!rule) return "";
   const n = Math.max(1, Number(rule.interval) || 1);
   if (rule.freq === "weekly") {
     const days = rule.weekdays?.length ? rule.weekdays : [parseKey(rule.start).getDay()];
     return `${n === 1 ? "Weekly" : `Every ${n} weeks`} · ${dayList(days)}`;
-  }
-  if (rule.freq === "monthly") {
-    const m = rule.monthly || {};
-    const on = m.mode === "nth" ? `${NTH_LABEL[m.nth] || m.nth} ${WEEKDAY_SHORT[m.weekday]}` : `day ${m.day ?? parseKey(rule.start).getDate()}`;
-    return `${n === 1 ? "Monthly" : `Every ${n} months`} · ${on}`;
   }
   return n === 1 ? "Daily" : `Every ${n} days`;
 }
@@ -214,7 +186,6 @@ export function validateRule(rule) {
   const n = Number(rule.interval);
   if (!Number.isInteger(n) || n < 1 || n > 99) return "Repeat interval must be between 1 and 99.";
   if (rule.freq === "weekly" && !(rule.weekdays || []).length) return "Pick at least one day of the week.";
-  if (rule.freq === "monthly" && rule.monthly?.mode === "day" && !(rule.monthly.day >= 1 && rule.monthly.day <= 31)) return "Pick a day of the month (1 to 31).";
   if (rule.ends?.type === "on") {
     if (!rule.ends.date) return "Pick an end date.";
     if (rule.ends.date < rule.start) return "The end date can't be before the start date.";

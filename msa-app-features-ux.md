@@ -147,4 +147,5 @@ No router needed — a single `currentView: 'list' | 'detail'` state toggle insi
 - **Cancelling a post asks for a reason** (under 100 characters), shown to readers on the Cancelled strip and in the calendar. A cancelled post keeps its place in every list.
 - **Notes can be edited per post** from its detail page.
 - Admins sign in with a **username**, not an email (see `supabase/ADMIN-ACCOUNTS.md`).
-- **Posts can repeat** (daily, weekly on chosen days, monthly, or every N days/weeks/months, ending never, on a date or after N times). A repeating post is one row; readers see each date on the calendar and Updates page, and admins can edit, cancel or delete one date, "this and all future", or the whole series. See `docs/recurring-events-concept.md`.
+- **Posts can repeat** (daily, or weekly on chosen days, ending never, on a date or after N times). A repeating post is one row; readers see each date on the calendar and Updates page, and admins can edit, cancel or delete one date, "this and all future", or the whole series. See `docs/recurring-events-concept.md`.
+- **Computers get the app's own date and time picker** (`assets/js/datetime-picker.js`) in place of the browser's, which looks different on every system and poor on Windows. Phones and tablets keep their native picker.
