@@ -284,8 +284,7 @@ textarea.input { min-height: 96px; resize: vertical; }
 .new-update-pill button:hover { background: var(--brand-600); }
 @keyframes pill-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
 
-.realtime-removing { overflow: hidden; transition: max-height .3s var(--ease), opacity .25s var(--ease), filter .25s var(--ease), margin .3s var(--ease), padding .3s var(--ease); filter: grayscale(1); opacity: .55; }
-.realtime-removing.collapsing { max-height: 0 !important; opacity: 0; margin-top: 0 !important; margin-bottom: 0 !important; padding-top: 0 !important; padding-bottom: 0 !important; border-width: 0 !important; }
+/* removal animation: see "Round 12" at the end of this file */
 
 /* ══════════════ PWA banners ══════════════ */
 
@@ -1504,3 +1503,44 @@ body {
 @media (max-width: 340px) {
   .cal-ev-time { width: 74px; height: 32px; font-size: 13.5px; padding: 0 4px; }
 }
+
+/* ══════════════ Round 12 ══════════════ */
+
+/* ── Back to Updates: one pill with a left arrow, on every secondary page ── */
+.back-link {
+  display: inline-flex; align-items: center; gap: 8px; margin: 0 0 16px; padding: 8px 14px 8px 11px;
+  font-family: var(--font-body); font-size: 13.5px; font-weight: 650; line-height: 1; text-decoration: none; color: var(--brand);
+  background: var(--glass-strong); border: 1px solid var(--glass-edge); border-radius: 999px; cursor: pointer;
+  box-shadow: 0 1px 2px rgba(45, 20, 80, .08), 0 4px 10px -6px rgba(60, 30, 100, .3);
+  -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
+  transition: background-color .15s var(--ease), box-shadow .15s var(--ease), scale .15s var(--ease);
+}
+.back-link svg { flex: none; transition: transform .18s var(--ease); }
+.back-link:hover { background: #fff; color: var(--brand); box-shadow: 0 1px 2px rgba(45, 20, 80, .1), 0 6px 14px -6px rgba(60, 30, 100, .38); }
+.back-link:hover svg { transform: translateX(-3px); }
+.back-link:active { scale: .97; }
+.back-link:focus-visible { outline: 0; box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 25%, transparent); }
+.app-header .back-link { margin: 0 0 0 auto; }
+
+/* ── Removing a card (deleted post): fade and slide out, then the gap closes ── */
+.realtime-removing {
+  overflow: hidden; pointer-events: none;
+  transition: opacity .24s var(--ease), transform .26s var(--ease), max-height .34s var(--ease) .12s, margin .34s var(--ease) .12s, padding .34s var(--ease) .12s, border-width .34s var(--ease) .12s;
+}
+.realtime-removing.collapsing { opacity: 0; transform: translateX(-16px) scale(.97); max-height: 0 !important; margin-top: 0 !important; margin-bottom: 0 !important; padding-top: 0 !important; padding-bottom: 0 !important; border-width: 0 !important; }
+@media (prefers-reduced-motion: reduce) { .realtime-removing { transition: none; } }
+
+/* ── Banners: one art piece per post type, same palette and line weight as the rest ── */
+.hero-media.is-pattern[data-type]::before { background-size: auto 100%; background-position: right bottom; background-repeat: no-repeat; -webkit-mask-image: linear-gradient(100deg, transparent 14%, #000 58%); mask-image: linear-gradient(100deg, transparent 14%, #000 58%); }
+.hero-media.is-pattern[data-type="prayer"]::before { background-image: url("../img/banner-prayer.svg"); }
+.hero-media.is-pattern[data-type="social"]::before { background-image: url("../img/banner-social.svg"); }
+.hero-media.is-pattern[data-type="announcement"]::before { background-image: url("../img/banner-announcement.svg"); }
+
+/* ── Timestamps: plain text, no pills or boxes ── */
+.cal-ev-time {
+  width: 76px; height: auto; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none;
+  justify-content: flex-start; text-align: left; font-size: 14.5px; font-weight: 750; letter-spacing: -0.01em; color: color-mix(in srgb, var(--c) 82%, #1b1626);
+}
+@media (max-width: 340px) { .cal-ev-time { width: 66px; padding: 0; font-size: 13.5px; } }
+.hero-v2 .hero-chips { gap: 6px 16px; }
+.hero-v2 .chip { padding: 0; border: 0; border-radius: 0; background: none; font-size: 14px; font-weight: 600; }

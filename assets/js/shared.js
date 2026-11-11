@@ -15,6 +15,31 @@ export function typeBanner(type) {
   return `<svg viewBox="0 0 400 132" preserveAspectRatio="xMidYMax slice" aria-hidden="true"><use href="#${symbolId}"></use></svg>`;
 }
 
+// Smoothly removes a card: it fades and slides, then the gap closes. Honours
+// "reduce motion". onDone runs once the element is gone from the page.
+export function animateRemove(el, onDone) {
+  if (!el || el.classList.contains("realtime-removing")) return;
+  if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    el.remove();
+    onDone?.();
+    return;
+  }
+  el.style.maxHeight = `${el.getBoundingClientRect().height}px`;
+  el.classList.add("realtime-removing");
+  void el.offsetHeight; // commit the starting height so the collapse animates
+  requestAnimationFrame(() => el.classList.add("collapsing"));
+
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    el.remove();
+    onDone?.();
+  };
+  el.addEventListener("transitionend", (e) => { if (e.target === el && e.propertyName === "max-height") finish(); });
+  setTimeout(finish, 650); // fallback if transitionend never fires
+}
+
 export function escapeHtml(str) {
   if (str == null) return "";
   return String(str)

@@ -1,6 +1,6 @@
 import { supabase } from "./supabase-client.js";
 import { icon } from "./icons.js?v=12";
-import { TYPE_META, typeBanner, escapeHtml, formatTime, formatDateHeading, formatEventDate, localDateKey, roomLabel, cancelledBanner } from "./shared.js?v=24";
+import { TYPE_META, escapeHtml, formatTime, formatDateHeading, formatEventDate, localDateKey, roomLabel, cancelledBanner, animateRemove } from "./shared.js?v=25";
 
 const loginView = document.getElementById("login-view");
 const appView = document.getElementById("app-view");
@@ -116,6 +116,7 @@ function teardownRealtime() {
 // An existing post is patched where it already sits, so cancelling, pinning or
 // editing never moves it. Only a brand-new post is added (at the top).
 function applyExecRealtimeRow(row) {
+  if (row.status === "deleted") return removeFromList(row.id);
   const html = execCardHtml(row);
   const existingEl = listEl.querySelector(`[data-update-id="${row.id}"]`);
 
@@ -129,6 +130,19 @@ function applyExecRealtimeRow(row) {
   if (emptyState) listEl.innerHTML = "";
   listEl.insertAdjacentHTML("afterbegin", html);
   syncEventsCount();
+}
+
+// A deleted post leaves the list (sliding out), here and on every other open
+// admin screen, and never comes back on reload: the list query skips deleted rows.
+function removeFromList(id) {
+  const el = listEl.querySelector(`[data-update-id="${id}"]`);
+  if (!el) return syncEventsCount();
+  animateRemove(el, () => {
+    syncEventsCount();
+    if (!listEl.querySelector("[data-update-id]")) {
+      listEl.innerHTML = `<div class="empty-state">${icon("i-inbox", { size: 22 })}<div class="title">No events posted yet.</div></div>`;
+    }
+  });
 }
 
 function syncEventsCount() {
@@ -204,6 +218,7 @@ async function loadEventsAndHeader() {
     .from("updates")
     .select("*")
     .neq("type", "exec_meeting")
+    .neq("status", "deleted")
     .order("created_at", { ascending: false })
     .limit(100);
 
@@ -227,17 +242,7 @@ function execCardHtml(update) {
   const meta = TYPE_META[update.type];
   if (!meta) return "";
 
-  if (update.status === "deleted") {
-    return `
-    <div class="list-card exec-item deleted" data-update-id="${update.id}">
-      <div class="list-icon">${icon("i-trash", { size: 22 })}</div>
-      <div class="list-body">
-        <div class="list-title">${escapeHtml(update.title)}</div>
-        <div class="list-meta">Deleted · ${formatDateHeading(new Date(update.created_at))}</div>
-      </div>
-      <span class="badge-pill badge-deleted">Deleted</span>
-    </div>`;
-  }
+  if (update.status === "deleted") return "";
 
   const pinned = update.pinned ? `<span class="kicker-badges"><span class="badge badge-pin">${icon("i-pushpin", { size: 13 })}Pinned</span></span>` : "";
   const body = `
@@ -456,6 +461,15 @@ async function applyChanges(changes, action) {
     return;
   }
 
+  if (action === "delete") {
+    currentDetailUpdate = null;
+    history.replaceState(null, "", location.pathname + location.search);
+    closeCancelForm();
+    showListView();
+    removeFromList(target.id);
+    return;
+  }
+
   Object.assign(target, changes);
   closeCancelForm();
   renderDetailCard(target);
@@ -525,14 +539,14 @@ function renderDetailCard(update) {
     : "";
 
   detailCardEl.innerHTML = `
-    <div class="hero-card" style="--c:var(--type-${update.type}-hero)">
-      <div class="hero-banner" style="background:var(--type-${update.type}-banner);color:var(--type-${update.type}-hero)">${typeBanner(update.type)}</div>
+    <div class="hero-card hero-v2${update.status === "cancelled" ? " is-cancelled" : ""}" style="--c:var(--type-${update.type}-hero)">
+      <div class="hero-media is-pattern" data-type="${update.type}"><span class="hero-media-icon">${icon(meta.iconId, { size: 24 })}</span></div>
       <div class="hero-body">
         <div class="hero-eyebrow">
-          <span class="hero-type">${icon(meta.iconId, { size: 15 })}${meta.label}</span>
+          <span class="hero-type"><i></i>${meta.label}</span>
           <span class="hero-status">${statusLabel}</span>
         </div>
-        <div class="hero-title">${escapeHtml(update.title)}</div>
+        <h2 class="hero-title">${escapeHtml(update.title)}</h2>
         ${chips.length ? `<div class="hero-chips">${chips.join("")}</div>` : ""}
         ${update.body ? `<p class="hero-notes">${escapeHtml(update.body)}</p>` : ""}
         <div class="detail-meta-grid">

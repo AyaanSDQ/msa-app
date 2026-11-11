@@ -1,6 +1,6 @@
 import { supabase } from "./supabase-client.js";
 import { icon } from "./icons.js?v=12";
-import { TYPE_META, escapeHtml, formatTime, roomLabel, emptyCardHtml } from "./shared.js?v=24";
+import { TYPE_META, escapeHtml, formatTime, roomLabel, emptyCardHtml, animateRemove } from "./shared.js?v=25";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
@@ -29,18 +29,23 @@ async function init() {
   await loadMonth();
   supabase
     .channel("calendar-updates")
-    .on("postgres_changes", { event: "*", schema: "public", table: "updates" }, () => {
+    .on("postgres_changes", { event: "*", schema: "public", table: "updates" }, (payload) => {
       cache.clear();
-      loadMonth();
+      // A deleted event slides out first; every other change just refreshes quietly.
+      const gone = payload.new?.status === "deleted" ? root.querySelector(`[data-update-id="${payload.new.id}"]`) : null;
+      if (gone) animateRemove(gone, () => loadMonth(true));
+      else loadMonth(true);
     })
     .subscribe();
 }
 
-async function loadMonth() {
+async function loadMonth(silent = false) {
   const key = monthKey(viewYear, viewMonth);
   if (!cache.has(key)) {
-    loading = true;
-    render();
+    if (!silent) {
+      loading = true;
+      render();
+    }
     const start = new Date(viewYear, viewMonth, 1);
     const end = new Date(viewYear, viewMonth + 1, 1);
     const { data, error } = await supabase
@@ -222,7 +227,7 @@ function eventCard(u) {
   const meta = TYPE_META[u.type];
   if (!meta) return "";
   const cancelled = u.status === "cancelled";
-  return `<article class="cal-ev${cancelled ? " is-cancelled" : ""}" style="--c:var(--type-${u.type}-hero)">
+  return `<article class="cal-ev${cancelled ? " is-cancelled" : ""}" style="--c:var(--type-${u.type}-hero)" data-update-id="${u.id}">
     <div class="cal-ev-time">${escapeHtml(formatTime(u.event_time))}</div>
     <div class="cal-ev-body">
       <div class="cal-ev-kicker"><i></i>${meta.label}</div>

@@ -19,7 +19,8 @@ import {
   badgesHtml,
   dateTileHtml,
   emptyCardHtml,
-} from "./shared.js?v=24";
+  animateRemove,
+} from "./shared.js?v=25";
 
 const PAGE_SIZE = 20;
 const heroEl = document.getElementById("hero");
@@ -319,7 +320,7 @@ function heroCardHtml(update) {
   const upcoming = update.event_time && new Date(update.event_time) > new Date();
   const status = !badgesHtml(update) && upcoming ? `<span class="badge badge-soon">Up next</span>` : "";
   const badges = `<div class="hero-badges">${badgesHtml(update)}${status}</div>`;
-  const media = `<div class="hero-media is-pattern"><span class="hero-media-icon">${icon(meta.iconId, { size: 24 })}</span>${badges}</div>`;
+  const media = `<div class="hero-media is-pattern" data-type="${update.type}"><span class="hero-media-icon">${icon(meta.iconId, { size: 24 })}</span>${badges}</div>`;
   return `
   <article class="hero-card hero-v2" style="--c:var(--type-${update.type}-hero)" data-update-id="${update.id}">
     ${media}
@@ -342,7 +343,7 @@ function cancelHeroHtml(update) {
   const meta = TYPE_META[update.type];
   const badges = `<div class="hero-badges">${badgesHtml(update)}</div>`;
   const tape = `<div class="cancel-tape">${icon("i-ban", { size: 15 })}<p><b>Cancelled</b>${update.cancel_reason ? ` <span>-</span> ${escapeHtml(update.cancel_reason)}` : ""}</p></div>`;
-  const media = `<div class="hero-media is-pattern"><span class="hero-media-icon">${icon("i-ban", { size: 24 })}</span>${badges}</div>`;
+  const media = `<div class="hero-media is-pattern" data-type="${update.type}"><span class="hero-media-icon">${icon("i-ban", { size: 24 })}</span>${badges}</div>`;
   return `
   <article class="hero-card hero-v2 is-cancelled" style="--c:var(--type-${update.type}-hero)" data-update-id="${update.id}">
     ${tape}
@@ -594,24 +595,6 @@ function handleDeleted(id) {
     historyCount = historyEl.querySelectorAll(".hist-card").length;
     syncEmptyState();
   });
-}
-
-function animateRemove(el, onDone) {
-  const height = el.getBoundingClientRect().height;
-  el.style.maxHeight = `${height}px`;
-  el.classList.add("realtime-removing");
-  void el.offsetHeight; // force reflow so the max-height transition actually animates
-  requestAnimationFrame(() => el.classList.add("collapsing"));
-
-  let finished = false;
-  const finish = () => {
-    if (finished) return;
-    finished = true;
-    el.remove();
-    onDone?.();
-  };
-  el.addEventListener("transitionend", finish, { once: true });
-  setTimeout(finish, 500); // fallback in case transitionend doesn't fire
 }
 
 function isScrolledNearTop() {
