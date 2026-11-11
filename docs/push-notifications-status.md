@@ -1,84 +1,108 @@
-# Push notifications: status and resume notes
+# Push notifications: where things stand and how to finish
 
-Written 2026-11-09 (branch `ummah-app`, live at https://ayaansdq.github.io/ummah/).
-No secrets are recorded here; keys live in `.env` (git-ignored) and Supabase.
+Last updated 2026-11-10. Live site: https://ayaansdq.github.io/ummah/ (GitHub Pages, branch `ummah-app`; `main` is kept in step with it).
+No secrets are recorded here. Keys live in `.env` (git-ignored), Supabase secrets and Supabase Vault.
 
-**One-line summary:** the server half (database trigger → Edge Function → OneSignal) is built and was verified end to end today. The browser half (a device actually subscribing) has never been confirmed to work: OneSignal has **0 subscribers**, so no notification has ever reached a phone or computer.
+## In one paragraph
+
+The server half (database trigger, then an Edge Function, then OneSignal) is built and was verified end to end on 2026-11-09. The device half has never worked: **OneSignal has 0 subscribers**, so no phone or computer has ever received a push. The likeliest cause is a bad service-worker path and scope in `assets/js/notify.js`, which was written for a site at the domain root but the app lives under `/ummah/`. Fixing that, plus two stale URLs, is the whole remaining job.
 
 ---
 
-## 1. Components (what makes it work)
+## 1. How it is supposed to work
 
-| Piece | What it is | Where |
+```
+exec posts an update
+  -> row inserted in public.updates
+  -> trigger updates_notify_on_change
+  -> pg_net HTTP POST (authorised by a Vault secret)
+  -> Edge Function notify-post
+  -> OneSignal REST API (segment "Subscribed Users")
+  -> every subscribed device shows a notification
+  -> tap opens <SITE_URL>#post-<id>, and reader.js scrolls to that post
+```
+
+| Piece | Role | Where |
 |---|---|---|
-| Postgres trigger `updates_notify_on_change` | Fires after insert/update on `public.updates`. Sends a push event for a **new active post** or a post **changed to cancelled**. Skips `exec_meeting` and every other change (edits, deletes, restores). | `supabase/migrations/20260915030000_notify_on_post_change.sql` |
-| `pg_net` extension | Lets the trigger make an HTTP POST from inside Postgres. Keeps a log in `net._http_response`. | same migration |
-| Supabase Vault secret `trigger_service_role_key` | Holds the service-role key the trigger uses to call the function (so no secret is in the repo). | Supabase Vault |
-| Edge Function `notify-post` | Receives the trigger's POST, builds the heading/message, calls OneSignal's REST API (`POST https://api.onesignal.com/notifications`, segment "Subscribed Users"), and sets the click link to `<SITE_URL>#post-<id>`. Deployed (ACTIVE, version 1, `verify_jwt: true`). | `supabase/functions/notify-post/index.ts` |
-| Edge Function secrets | `ONESIGNAL_APP_ID`, `ONESIGNAL_REST_API_KEY`, `SITE_URL` (plus Supabase's own). | Supabase → Edge Functions → Secrets |
-| OneSignal (Web Push) | Push provider. Custom-code web integration, SDK v16. App ID is public and is in `notify.js`. | OneSignal dashboard |
-| Client prompt `notify.js` | Shows the "Enable notifications" banner, asks for permission, subscribes the device. **Only runs when the site is launched as an installed PWA** (standalone display mode) on a browser that supports push. Dismissal is remembered in `localStorage` key `msa-notify-dismissed`. | `assets/js/notify.js`, loaded by `index.html` (not by `view.html`) |
-| Service worker `sw.js` | Our app-shell worker; it pulls in OneSignal's worker with `importScripts("https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js")` so one worker handles both caching and push. | `sw.js` |
-| `sw-register.js` | Registers `sw.js` on every page (default scope = the folder it sits in, i.e. `/ummah/`). | `assets/js/sw-register.js` |
-| PWA install flow | Needed for iOS push (iOS only allows push from the home-screen app) and gates the prompt. | `manifest.json`, `install.js` |
-| Supabase CLI via `npx supabase` | How I reach the project. Uses the token in `.env`. | see "Notes" |
+| Trigger `updates_notify_on_change` | Fires after insert/update on `public.updates`. Sends for a **new active post** or a post **changed to cancelled**. Ignores `exec_meeting` posts and all other edits, deletes and restores. | `supabase/migrations/20260915030000_notify_on_post_change.sql` |
+| `pg_net` | Lets Postgres make the HTTP call. Logs every response in `net._http_response` (kept only a few hours). | same migration |
+| Vault secret `trigger_service_role_key` | The key the trigger uses to call the function, so nothing secret is in the repo. | Supabase Vault |
+| Edge Function `notify-post` | Builds the heading and message, calls OneSignal, sets the tap link. Deployed, ACTIVE, `verify_jwt: true`. | `supabase/functions/notify-post/index.ts` |
+| Function secrets | `ONESIGNAL_APP_ID`, `ONESIGNAL_REST_API_KEY`, `SITE_URL`. | Supabase, Edge Functions, Secrets |
+| OneSignal app | Push provider, Web Push, custom-code integration, SDK v16. App ID `90056235-55df-4620-b88c-e216a55f1b4d` (public, safe in client code). | OneSignal dashboard |
+| `notify.js` | The "Enable notifications" banner. Initialises OneSignal and subscribes the device. **Runs only in an installed PWA (standalone display mode) on a push-capable browser.** Dismissal is remembered in `localStorage` key `msa-notify-dismissed`. | `assets/js/notify.js`, loaded by `index.html` only |
+| `sw.js` | App-shell worker. Also pulls in OneSignal's worker with `importScripts("https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js")`, so one worker does caching and push. | `sw.js` |
+| `sw-register.js` | Registers `sw.js` on every page. Its default scope is the folder the worker sits in, so `/ummah/`. | `assets/js/sw-register.js` |
+| PWA install | Needed for iOS push, and it gates the prompt. | `manifest.json`, `install.js` |
 
-Flow: exec posts → row inserted → trigger → `pg_net` POST → `notify-post` → OneSignal → every subscribed device → tap opens `<SITE_URL>#post-<id>` and `reader.js` scrolls to that post.
-
----
-
-## 2. What should be working now, and what shouldn't
-
-**Should be working (server side):**
-- Trigger is installed and enabled; Vault key exists.
-- Edge Function is deployed; its OneSignal App ID and REST key are the same ones in `.env` and the client.
-- OneSignal accepts our API calls.
-
-**Should NOT be working yet (client side / links):**
-- A device subscribing. The OneSignal setup in `notify.js` is almost certainly incompatible with hosting under `/ummah/` (see section 4). Until that is fixed, expect no subscribers.
-- Notification click links. The `SITE_URL` secret still holds the **old** address `https://ayaansdq.github.io/msa-app/` (verified by comparing its hash), which now returns 404. The same old address is the fallback default in `index.ts`.
-- Anything installed from the old `/msa-app/` address. That install points at a dead URL; reinstall from `/ummah/`.
-- Notifications for exec meetings: intentionally never sent.
+`view.html` (the exec "View" tab) deliberately has no OneSignal and no install banner.
 
 ---
 
-## 3. What has and hasn't worked (evidence)
+## 2. What is verified and what is not
 
-**Confirmed working, checked 2026-11-09:**
-- Trigger present and enabled on `public.updates`.
-- Vault secret `trigger_service_role_key` present (created 2026-09-15).
-- `net._http_response` holds 38 responses, **all HTTP 200, no errors**. The latest batch came from the 24 non-exec sample posts inserted today (the 3 exec meetings correctly sent nothing).
-- The function's response body for those calls: `{"ok":true,"result":{"id":"","errors":["All included players are not subscribed"]}}`. That proves the whole chain ran and OneSignal accepted the app ID and key. It simply had nobody to send to.
-- OneSignal REST check: **0 players/subscribers**, 0 notifications on record.
-- `ONESIGNAL_APP_ID` and `ONESIGNAL_REST_API_KEY` in the function match `.env`; the client's app ID matches too.
+**Verified working (2026-11-09):**
+- Trigger present and enabled. Vault secret present (created 2026-09-15).
+- `net._http_response` held 38 responses, all HTTP 200, no errors. The function's reply was `{"ok":true,"result":{"id":"","errors":["All included players are not subscribed"]}}`. That proves the chain ran and OneSignal accepted our app ID and key. There was simply nobody to send to.
+- OneSignal reported 0 subscribers and 0 notifications on record.
+- The function's `ONESIGNAL_APP_ID` and `ONESIGNAL_REST_API_KEY` match `.env`, and the client app ID matches too.
+- The 3 sample exec meetings correctly sent nothing.
 
-**Reported by you:**
-- Early test: installed the app on your phone (not logged in), posted an event from your computer, **no notification arrived**. This is the only end-to-end device result either of us has reported, and it was a failure.
-- You then enabled the Web Push platform in OneSignal (it had been reporting push as not enabled) and completed the custom-code setup step. **No later success was ever reported, and no device has appeared in OneSignal since.**
+**Reported by you:** an early test (app installed on your phone, post made from your computer) produced no notification. You then enabled the Web Push platform in OneSignal and completed the custom-code setup. No later success has been reported and no device has appeared in OneSignal.
 
 **Never confirmed (do not assume either way):**
 - Whether `OneSignal.init` succeeds on the live site.
-- Whether any browser or phone ever received a permission prompt or a notification.
-- Whether the OneSignal dashboard's Site URL is set correctly (see below).
+- Whether any browser has ever shown the permission prompt.
+- Whether the OneSignal dashboard's Site URL is correct.
 
 ---
 
-## 4. Suspected causes, in order (all unverified)
+## 3. Why there are no subscribers (suspects, most likely first)
 
-1. **Service-worker path and scope.** `notify.js` calls `OneSignal.init` with `serviceWorkerPath: "sw.js"` and `serviceWorkerParam: { scope: "/" }`. The site lives at `https://ayaansdq.github.io/ummah/`, so `sw.js` is at `/ummah/sw.js`. A worker can't claim scope `/` from inside `/ummah/` (GitHub Pages doesn't send the `Service-Worker-Allowed` header), and OneSignal may resolve `"sw.js"` against the domain root, which is a 404. The same problem existed under the old `/msa-app/` address, so this is the likeliest reason there has never been a subscriber. Likely fix: point OneSignal at `/ummah/sw.js` with scope `/ummah/` (ideally built from the page URL so it doesn't hard-code the repo name).
-2. **OneSignal dashboard Site URL** was set to the old address (noted earlier, never rechecked). It must match `https://ayaansdq.github.io/ummah/`.
-3. **`SITE_URL` secret** is stale (affects the tap-through link, not delivery).
-4. **Prompt gating.** The banner only appears in an installed PWA on a push-capable browser, and never again after it's dismissed. A normal browser tab will never show it, which can look like "broken" during testing.
+All unverified. They are hypotheses to test, not findings.
+
+1. **Service-worker path and scope clash.** `notify.js` calls `OneSignal.init` with `serviceWorkerPath: "sw.js"` and `serviceWorkerParam: { scope: "/" }`.
+   - The worker is at `/ummah/sw.js`. A worker may only claim scopes at or below its own folder unless the server sends a `Service-Worker-Allowed` header, and GitHub Pages does not. So scope `/` is refused.
+   - OneSignal may also resolve `"sw.js"` against the domain root (`/sw.js`), which would be a 404.
+   - `sw-register.js` separately registers the same worker at scope `/ummah/`, so the two registrations disagree.
+   - The same problem existed under the old `/msa-app/` address, which fits there never having been a subscriber.
+2. **OneSignal dashboard Site URL** was set to the old address when last noted and has not been rechecked. It must be `https://ayaansdq.github.io/ummah/`. OneSignal may refuse to initialise on a mismatched origin or path.
+3. **`SITE_URL` secret** still holds `https://ayaansdq.github.io/msa-app/` (checked by comparing hashes). The same old address is the fallback in `index.ts` line 12. This breaks the tap-through link, not delivery.
+4. **Prompt gating.** The banner shows only in an installed PWA on a push-capable browser, and never again after dismissal. A normal browser tab will never show it, which can look like a bug during testing.
+5. **Old installs.** Anything installed from `/msa-app/` points at a dead URL and must be reinstalled from `/ummah/`.
 
 ---
 
-## 5. Notes to remember when resuming
+## 4. The fix, in order
 
-- **Spam risk once there are subscribers:** the trigger sends one push for **every** active post inserted, with no regard to event time. Seeding sample data (24 posts last time) would have sent 24 notifications. Before inserting test data again, disable the trigger (`alter table public.updates disable trigger updates_notify_on_change;`) and re-enable afterward. Also decide whether back-dated or far-future posts should notify at all.
-- **Redeploy needed** after changing `index.ts` (the default URL inside it should also be updated). `SITE_URL` itself is changed with `npx supabase secrets set SITE_URL=https://ayaansdq.github.io/ummah/`.
-- **CLI:** run `npx supabase ...` with `SUPABASE_ACCESS_TOKEN` exported from `.env`. The new token has a **30-day expiry (about 2026-12-09)**; "Invalid access token" means it lapsed again. The token was pasted into chat, so revoke it when done. Production writes need `--yes`; reads use `--read-only`. `npx supabase secrets list` shows only hashes.
-- **Testing realistically:** use an installed PWA (desktop Chrome can install it too; iPhones need iOS 16.4+ and the home-screen icon). Clear `msa-notify-dismissed` in `localStorage` if you dismissed the banner. After a subscriber shows up in OneSignal, insert or cancel one real post to test.
-- **`pg_net` log:** `select created, status_code, content from net._http_response order by created desc;` is the quickest way to see whether the trigger fired and what OneSignal said. It is only kept for a few hours.
-- **View tab:** `view.html` deliberately has no OneSignal or install banner.
-- **Other loose ends (not push):** `20261108000000_post_media_priority.sql` is still unapplied (pinned/priority/image don't work live); public sign-up is still enabled in Supabase Auth; no keep-alive workflow yet, so the free-tier project can pause again after about 7 idle days; `ummah-app` has not been merged into `main`.
-- **Next step when we resume:** fix the OneSignal service-worker path/scope, update the OneSignal dashboard Site URL and the `SITE_URL` secret, redeploy the function, reinstall the PWA from `/ummah/` on a test device, get one subscriber to appear, then test with a single post.
+1. **`notify.js`:** point OneSignal at the real worker and scope. Build both from the page URL so the repo name is not hard-coded, for example `serviceWorkerPath: new URL("sw.js", location.href).pathname` and `serviceWorkerParam: { scope: new URL("./", location.href).pathname }`. Both should resolve to `/ummah/sw.js` and `/ummah/`, matching what `sw-register.js` already registers. Bump the `notify.js` version string in `index.html`, and bump `CACHE_NAME` in `sw.js`.
+2. **OneSignal dashboard:** set the Site URL to `https://ayaansdq.github.io/ummah/` (Settings, Web Push configuration). This is a dashboard change only you can make.
+3. **`SITE_URL` secret:** `npx supabase secrets set SITE_URL=https://ayaansdq.github.io/ummah/` (needs `--yes` from the agent).
+4. **`index.ts`:** change the fallback on line 12 to the `/ummah/` address and redeploy: `npx supabase functions deploy notify-post`.
+5. **Test device:** uninstall any old copy, then install the PWA fresh from `/ummah/`. On an iPhone this needs iOS 16.4 or newer and the home-screen icon. Desktop Chrome can install it too, which is the quickest place to test. Clear `msa-notify-dismissed` from `localStorage` if the banner was dismissed.
+6. **Confirm a subscriber:** open the installed app, tap Enable, accept the prompt, and check the OneSignal dashboard (Audience, Subscriptions) for 1 subscriber. If none appears, open the browser console on the installed app and read the `OneSignal.init` error. That error will say which of the suspects above is real.
+7. **Test with one post:** make a single real post, then watch `net._http_response` and the device.
+
+Useful check at any time:
+
+```sql
+select created, status_code, content from net._http_response order by created desc limit 10;
+```
+
+---
+
+## 5. Cautions
+
+- **Spam risk once there are subscribers.** The trigger sends one push for **every** active post inserted, regardless of event time. Seeding 24 sample posts would send 24 notifications. Before inserting test data, run `alter table public.updates disable trigger updates_notify_on_change;` and re-enable it afterwards. Also decide whether back-dated or far-future posts should notify at all.
+- **Redeploy after editing `index.ts`.** Changing a secret alone needs no redeploy.
+- **Supabase CLI.** Run `npx supabase ...` with `SUPABASE_ACCESS_TOKEN` exported from `.env`. The current token expires about **2026-12-09** ("Invalid access token" means it lapsed). It was pasted into chat, so revoke it when done. Production writes need `--yes`, reads use `--read-only`. `secrets list` shows only hashes.
+- **Free-tier pause.** The project paused once for inactivity (2026-11-07). There is still no keep-alive workflow, so it can pause again after about 7 idle days, and a paused project cannot send anything.
+
+---
+
+## 6. Other loose ends (not push)
+
+- `supabase/migrations/20261108000000_post_media_priority.sql` is still unapplied, so pinned posts, priority and images do not work live.
+- Admin login is now username-only (placeholder identifiers, see `supabase/ADMIN-ACCOUNTS.md`). Public sign-up should stay off in Supabase Auth; I have not independently confirmed that setting.
+- `msa-app-spec.md` still describes email and password login.
+- `ummah-app` and `main` currently point at the same commit. The local remote URL is already `https://github.com/AyaanSDQ/ummah.git`.
