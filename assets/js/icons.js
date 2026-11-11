@@ -41,8 +41,8 @@ export const ICON_SPRITE = `
 <symbol id="i-dot" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5" fill="currentColor" stroke="none"/></symbol>
 </defs></svg>`;
 
-export function icon(id, { size = 18, stroke = 2.25, filled = false } = {}) {
-  stroke = Math.min(Math.max(stroke, 2.1), 2.5);
+export function icon(id, { size = 18, stroke = 2.8, filled = false } = {}) {
+  stroke = Math.min(Math.max(stroke, 2.6), 3.1);
   const fillAttr = filled ? "currentColor" : "none";
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="${fillAttr}" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round"><use href="#${id}"></use></svg>`;
 }

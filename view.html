@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex">
 <title>View — Ummah</title>
 <meta name="description" content="Updates, room numbers and events.">
-<link rel="stylesheet" href="assets/css/app.css?v=96">
+<link rel="stylesheet" href="assets/css/app.css?v=98">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/svg+xml" href="assets/icons/logo.svg">
 <link rel="icon" href="assets/icons/icon-192.png">
@@ -64,13 +64,13 @@
   </div>
 
   <nav class="bnav" aria-label="Administrative sections">
-    <a href="exec.html" class="bnav-item"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-case"></use></svg><span>Admins</span></a>
-    <a href="view.html" class="bnav-item" aria-current="page"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-mega"></use></svg><span>View</span></a>
+    <a href="exec.html" class="bnav-item"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-case"></use></svg><span>Admins</span></a>
+    <a href="view.html" class="bnav-item" aria-current="page"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-mega"></use></svg><span>View</span></a>
   </nav>
 </div>
 
 <script type="module">
-  import { ICON_SPRITE } from "./assets/js/icons.js?v=11";
+  import { ICON_SPRITE } from "./assets/js/icons.js?v=12";
   document.getElementById("icon-sprite").innerHTML = ICON_SPRITE;
 </script>
 <script type="module">
@@ -79,7 +79,7 @@
   const { data } = await supabase.auth.getSession();
   if (!data.session) location.replace("exec.html");
 </script>
-<script type="module" src="assets/js/reader.js?v=31"></script>
+<script type="module" src="assets/js/reader.js?v=32"></script>
 <script src="assets/js/fx.js?v=4" defer></script>
 <script src="assets/js/sw-register.js?v=1"></script>
 </body>

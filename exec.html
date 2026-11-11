@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ummah — Administrative</title>
-<link rel="stylesheet" href="assets/css/app.css?v=96">
+<link rel="stylesheet" href="assets/css/app.css?v=98">
 <link rel="icon" type="image/svg+xml" href="assets/icons/logo.svg">
 <link rel="icon" href="assets/icons/icon-192.png">
 <meta name="theme-color" content="#5b2e91">
@@ -15,10 +15,13 @@
 
 <div class="app">
 
+  <header class="app-header masthead">
+    <div class="app-title" aria-label="Ummah"><span class="app-name">Ummah</span></div>
+  </header>
+
   <div id="login-view" class="login-wrap" hidden>
     <div class="login-card">
       <a href="index.html" class="back-link"><span class="back-icon">BACK_ICON</span>Back to site</a>
-      <img class="login-logo" src="assets/icons/logo.svg" alt="" width="52" height="52">
       <h1 class="login-title">Administrative login</h1>
       <p class="login-sub">For MSA administrators only. There is no public sign-up.</p>
       <div id="login-error" class="error-banner" hidden></div>
@@ -42,8 +45,10 @@
   <div id="app-view" hidden>
 
     <div id="list-view">
-      <div class="exec-topbar">
-        <div class="app-title">All events</div>
+      <section class="feed-section exec-section">
+      <div class="section-heading exec-heading">
+        <div class="label">All events</div>
+        <span class="count" id="events-count">0</span>
         <button type="button" id="logout-btn" class="logout-link">Log out</button>
       </div>
 
@@ -59,7 +64,6 @@
             <button type="button" class="type-option selected" data-type="prayer">Prayer</button>
             <button type="button" class="type-option" data-type="social">Social</button>
             <button type="button" class="type-option" data-type="announcement">Announcement</button>
-            <button type="button" class="type-option" data-type="exec_meeting">Exec meeting</button>
           </div>
 
           <div id="form-error" class="error-banner" hidden></div>
@@ -69,7 +73,6 @@
             <div class="field"><label id="location-label">Room number</label><input class="input" name="location"></div>
             <div class="field"><label>Time <span class="form-hint" id="time-hint">(required)</span></label><input class="input" type="datetime-local" name="event_time"></div>
             <div class="field"><label>Notes</label><textarea class="input" name="notes"></textarea></div>
-            <div class="field"><label>Image link <span class="form-hint">(optional banner or flyer)</span></label><input class="input" type="url" name="image_url" placeholder="https://..." autocomplete="off"></div>
             <div class="field">
               <label>Priority</label>
               <select class="input" name="priority">
@@ -82,11 +85,6 @@
               <input type="checkbox" name="pinned">
               <span class="toggle-track"><span class="toggle-thumb"></span></span>
               Pin to the top
-            </label>
-            <label class="toggle-row">
-              <input type="checkbox" name="accepts_feedback">
-              <span class="toggle-track"><span class="toggle-thumb"></span></span>
-              Accept feedback
             </label>
             <div class="form-actions">
               <button type="submit" class="btn btn-primary">Post update</button>
@@ -102,6 +100,7 @@
         <div class="skeleton skeleton-line"></div>
       </div>
       <div id="events-list"></div>
+      </section>
     </div>
 
     <div id="detail-view" hidden>
@@ -116,11 +115,24 @@
       <div id="detail-content" hidden>
         <div id="detail-card"></div>
 
-        <div class="section-heading" style="margin-top:20px">
-          <div class="label">Feedback</div>
-          <span class="count" id="detail-feedback-count"></span>
-        </div>
-        <div id="detail-feedback-list"></div>
+        <form id="notes-form" class="notes-form" hidden>
+          <label for="notes-input">Notes</label>
+          <textarea id="notes-input" class="input" name="notes" rows="3" maxlength="600" placeholder="Details readers will see on this post"></textarea>
+          <div class="notes-actions">
+            <button type="submit" class="btn btn-primary">Save notes</button>
+            <span id="notes-status" class="form-hint" role="status"></span>
+          </div>
+        </form>
+
+        <form id="cancel-form" class="cancel-form" hidden>
+          <label for="cancel-reason">Reason for cancellation</label>
+          <input id="cancel-reason" class="input" name="reason" maxlength="99" autocomplete="off" placeholder="For example: room unavailable">
+          <div class="cancel-meta"><span id="cancel-error" class="cancel-error" role="alert" hidden></span><span class="cancel-counter"><span id="cancel-count">0</span>/99</span></div>
+          <div class="cancel-actions">
+            <button type="submit" class="btn btn-delete-action">Cancel this post</button>
+            <button type="button" id="cancel-back" class="btn btn-secondary">Keep post</button>
+          </div>
+        </form>
 
         <div id="detail-actionbar" class="detail-actionbar"></div>
         <div id="detail-hint" class="form-hint" style="margin-top:9px"></div>
@@ -131,8 +143,8 @@
 
   <!-- Outside #app-view on purpose: that element's entrance animation would trap this fixed bar inside it. -->
   <nav id="exec-nav" class="bnav" hidden aria-label="Administrative sections">
-      <a href="exec.html" class="bnav-item" aria-current="page"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-case"></use></svg><span>Admins</span></a>
-      <a href="view.html" class="bnav-item"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-mega"></use></svg><span>View</span></a>
+      <a href="exec.html" class="bnav-item" aria-current="page"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-case"></use></svg><span>Admins</span></a>
+      <a href="view.html" class="bnav-item"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-mega"></use></svg><span>View</span></a>
     </nav>
 
   <footer class="app-footer">
@@ -146,7 +158,7 @@
 </div>
 
 <script type="module">
-  import { ICON_SPRITE, icon } from "./assets/js/icons.js?v=11";
+  import { ICON_SPRITE, icon } from "./assets/js/icons.js?v=12";
   document.getElementById("icon-sprite").innerHTML = ICON_SPRITE;
   document.querySelector(".plus-icon").innerHTML = icon("i-plus", { size: 16, stroke: 2.75 });
   document.getElementById("new-post-chev").innerHTML = icon("i-chev", { size: 15, stroke: 2.75 });
@@ -159,7 +171,7 @@
   });
   document.querySelectorAll(".back-icon").forEach((el) => { el.innerHTML = icon("i-back", { size: 14, stroke: 2.75 }); });
 </script>
-<script type="module" src="assets/js/exec.js?v=34"></script>
+<script type="module" src="assets/js/exec.js?v=36"></script>
 <script src="assets/js/fx.js?v=4" defer></script>
 <script src="assets/js/sw-register.js?v=1"></script>
 </body>

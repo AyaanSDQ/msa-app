@@ -1,4 +1,4 @@
-import { icon } from "./icons.js?v=11";
+import { icon } from "./icons.js?v=12";
 
 const DISMISS_KEY = "msa-install-dismissed";
 

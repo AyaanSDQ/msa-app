@@ -137,3 +137,13 @@ No router needed — a single `currentView: 'list' | 'detail'` state toggle insi
   - **Restore** — a distinct third color (e.g., blue outline) so it doesn't read as either "undo the discard" or "another destructive action."
 - **Empty states** get a small muted icon + one line of friendly text, never just blank space — reinforces that the app is working, not broken.
 - **PWA installed-mode spacing**: respect `env(safe-area-inset-top)` so the hero card's padding clears the iOS notch/Android status bar in standalone mode.
+
+## Changes since this document was written (November 2026)
+
+- **Feedback has been removed** from the reader and admin pages. The `feedback` table and any stored feedback are kept in the database, but nothing reads or writes them.
+- **Exec meetings are no longer a post type.** Prayer, Social and Announcement remain. Old exec-meeting rows stay hidden everywhere.
+- **Image links were removed** from the new-post form and from cards.
+- **Any number of posts can be pinned.** All pinned posts show at the top of the Updates page as hero cards, whatever their date. Admins pin and unpin from a post's detail page.
+- **Cancelling a post asks for a reason** (under 100 characters), shown to readers on the Cancelled strip and in the calendar. A cancelled post keeps its place in every list.
+- **Notes can be edited per post** from its detail page.
+- Admins sign in with a **username**, not an email (see `supabase/ADMIN-ACCOUNTS.md`).

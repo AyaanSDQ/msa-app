@@ -1,5 +1,5 @@
 import { supabase } from "./supabase-client.js";
-import { icon } from "./icons.js?v=11";
+import { icon } from "./icons.js?v=12";
 import {
   TYPE_META,
   typeBanner,
@@ -14,13 +14,12 @@ import {
   formatRelative,
   cancelledBanner,
   roomLabel,
-  safeImageUrl,
   priorityOf,
   isEventPost,
   badgesHtml,
   dateTileHtml,
   emptyCardHtml,
-} from "./shared.js?v=23";
+} from "./shared.js?v=24";
 
 const PAGE_SIZE = 20;
 const heroEl = document.getElementById("hero");
@@ -52,6 +51,9 @@ let historyDone = false;
 // hero (pickHero needs the whole day's set, not just one changed row).
 let todayRows = [];
 let upcomingRows = [];
+// Pinned posts (any date, any number) sit at the top as hero cards and are
+// kept out of every other list.
+let pinnedRows = [];
 let hasDeferredTodayUpdate = false;
 
 // Realtime events can arrive before the initial fetch finishes; buffer them
@@ -65,9 +67,10 @@ async function init() {
   setupRealtime();
 
   const now = new Date();
-  const [{ today, upcoming }, historyRows] = await Promise.all([fetchTodayAndUpcoming(now), fetchHistoryPage(now)]);
+  const [{ today, upcoming }, historyRows, pinned] = await Promise.all([fetchTodayAndUpcoming(now), fetchHistoryPage(now), fetchPinned()]);
   todayRows = today;
   upcomingRows = upcoming;
+  pinnedRows = pinned;
 
   renderHistoryBatch(historyRows);
   renderToday(now);
@@ -82,7 +85,6 @@ async function init() {
   buffered.forEach(handleRealtimeEvent);
 
   setInterval(refreshRelativeTimestamps, 60_000);
-  wireFeedbackDelegation();
   wireNewUpdatePill();
 
   loadMoreBtn.addEventListener("click", handleLoadMore);
@@ -112,7 +114,19 @@ async function fetchTodayAndUpcoming(now) {
   ]);
   if (todayRes.error) console.error("Failed to load today's updates", todayRes.error);
   if (upcomingRes.error) console.error("Failed to load upcoming updates", upcomingRes.error);
-  return { today: todayRes.data || [], upcoming: upcomingRes.data || [] };
+  return { today: (todayRes.data || []).filter((r) => !r.pinned), upcoming: (upcomingRes.data || []).filter((r) => !r.pinned) };
+}
+
+// Every pinned post, whatever its date. Cancelled ones stay where they are
+// (with their Cancelled strip); deleted ones are already excluded.
+async function fetchPinned() {
+  const { data, error } = await baseQuery().eq("pinned", true);
+  if (error) console.error("Failed to load pinned updates", error);
+  return sortPinned(data || []);
+}
+
+function sortPinned(rows) {
+  return [...rows].sort((a, b) => postWeight(b) - postWeight(a) || new Date(b.created_at) - new Date(a.created_at));
 }
 
 // One page of history (everything whose effective time is before today),
@@ -138,7 +152,9 @@ async function fetchHistoryPage(now) {
   timedOffset += t;
   untimedOffset += u;
   historyDone = page.length < PAGE_SIZE;
-  return page.sort((a, b) => new Date(effectiveTime(b)) - new Date(effectiveTime(a)) || tiebreak(a, b));
+  // Pinned posts live at the top; they are skipped here but still counted in
+  // the offsets above, so paging stays stable.
+  return page.filter((r) => !r.pinned).sort((a, b) => new Date(effectiveTime(b)) - new Date(effectiveTime(a)) || tiebreak(a, b));
 }
 
 async function handleLoadMore() {
@@ -166,7 +182,7 @@ function pickHero(todayRows, now) {
   const eligible = todayRows.filter((r) => r.status === "active");
   if (eligible.length === 0) return null;
 
-  // Pinned and high-priority posts always take the featured spot.
+  // High-priority posts take the featured spot (pinned posts are shown above).
   const flagged = eligible.filter((r) => postWeight(r) > 0).sort((a, b) => postWeight(b) - postWeight(a) || new Date(b.created_at) - new Date(a.created_at));
   if (flagged.length) return flagged[0];
 
@@ -191,7 +207,7 @@ function tiebreak(a, b) {
 }
 
 function postWeight(r) {
-  return (r.pinned ? 4 : 0) + (priorityOf(r) === "urgent" ? 3 : priorityOf(r) === "important" ? 2 : 0);
+  return priorityOf(r) === "urgent" ? 3 : priorityOf(r) === "important" ? 2 : 0;
 }
 
 function renderToday(now) {
@@ -200,7 +216,7 @@ function renderToday(now) {
     .filter((r) => r !== hero)
     .sort((a, b) => postWeight(b) - postWeight(a) || new Date(effectiveTime(a)) - new Date(effectiveTime(b)) || tiebreak(a, b));
 
-  heroEl.innerHTML = hero ? heroCardHtml(hero) : "";
+  heroEl.innerHTML = sortPinned(pinnedRows).map(heroCardHtml).join("") + (hero ? heroCardHtml(hero) : "");
   todayCountEl.textContent = String(rest.length);
   todayEl.innerHTML = rest.map((r) => listCardHtml(r)).join("");
   todaySection.hidden = rest.length === 0;
@@ -264,20 +280,14 @@ function renderHistoryBatch(rows, { append = false } = {}) {
 
 function heroCardHtml(update) {
   const meta = TYPE_META[update.type];
-  const img = safeImageUrl(update);
+  const cancelled = update.status === "cancelled";
   const upcoming = update.event_time && new Date(update.event_time) > new Date();
-  const status =
-    update.status === "cancelled"
-      ? `<span class="badge badge-cancelled">Cancelled</span>`
-      : !badgesHtml(update) && upcoming
-        ? `<span class="badge badge-soon">Up next</span>`
-        : "";
+  const status = !cancelled && !badgesHtml(update) && upcoming ? `<span class="badge badge-soon">Up next</span>` : "";
   const badges = `<div class="hero-badges">${badgesHtml(update)}${status}</div>`;
-  const media = img
-    ? `<div class="hero-media has-image"><img src="${escapeHtml(img)}" alt="" loading="lazy" decoding="async" onerror="this.closest('.hero-media').className='hero-media is-pattern';this.remove()">${badges}</div>`
-    : `<div class="hero-media is-pattern"><span class="hero-media-icon">${icon(meta.iconId, { size: 24 })}</span>${badges}</div>`;
+  const media = `<div class="hero-media is-pattern"><span class="hero-media-icon">${icon(meta.iconId, { size: 24 })}</span>${badges}</div>`;
   return `
-  <article class="hero-card hero-v2" style="--c:var(--type-${update.type}-hero)" data-update-id="${update.id}">
+  <article class="hero-card hero-v2${cancelled ? " is-cancelled" : ""}" style="--c:var(--type-${update.type}-hero)" data-update-id="${update.id}">
+    ${cancelled ? cancelledBanner(update.cancel_reason) : ""}
     ${media}
     <div class="hero-body">
       <div class="hero-eyebrow"><span class="hero-type"><i></i>${meta.label}</span></div>
@@ -286,9 +296,7 @@ function heroCardHtml(update) {
       ${update.body ? `<p class="hero-notes">${escapeHtml(update.body)}</p>` : ""}
       <div class="hero-footer" data-updated-at="${update.created_at}">
         <span class="updated-text">${formatRelative(update.created_at)}</span>
-        ${feedbackToggleHtml(update)}
       </div>
-      ${feedbackRowHtml(update)}
     </div>
   </article>`;
 }
@@ -308,11 +316,9 @@ function listCardHtml(update) {
   const meta = TYPE_META[update.type];
   const event = isEventPost(update);
   const pr = priorityOf(update);
-  const img = safeImageUrl(update);
   const lead = event
     ? dateTileHtml(update.event_time, update.type)
     : `<div class="list-icon" style="color:var(--type-${update.type}-icon)">${icon(meta.iconId, { size: 22 })}</div>`;
-  const thumb = img ? `<img class="card-thumb" src="${escapeHtml(img)}" alt="" loading="lazy" decoding="async" onerror="this.remove()">` : "";
   const badges = badgesHtml(update);
   const body = `
     ${lead}
@@ -324,13 +330,11 @@ function listCardHtml(update) {
       <div class="list-updated" data-updated-at="${update.created_at}">
         <span class="updated-text">${formatRelative(update.created_at)}</span>
       </div>
-      ${feedbackRowHtml(update)}
-    </div>
-    ${thumb}`;
+    </div>`;
   const cls = `list-card ${event ? "card-event" : "card-announcement"}${pr !== "normal" ? ` is-${pr}` : ""}`;
   if (update.status === "cancelled") {
     return `<div class="hist-card" data-update-id="${update.id}" style="background:var(--type-${update.type}-list)">
-      ${cancelledBanner()}
+      ${cancelledBanner(update.cancel_reason)}
       <div class="${cls}" style="box-shadow:none;margin-bottom:0">${body}</div>
     </div>`;
   }
@@ -346,11 +350,9 @@ function histCardHtml(update) {
         <div class="hist-title">${escapeHtml(update.title)}</div>
         <div class="hist-meta">${metaLine(update)}</div>
       </div>
-      ${feedbackToggleHtml(update)}
-    </div>
-    ${feedbackRowHtml(update) ? `<div style="padding:0 14px 14px">${feedbackRowHtml(update)}</div>` : ""}`;
+    </div>`;
   if (update.status === "cancelled") {
-    return `<div class="hist-card" style="background:var(--type-${update.type}-list)" data-update-id="${update.id}">${cancelledBanner()}${row}</div>`;
+    return `<div class="hist-card" style="background:var(--type-${update.type}-list)" data-update-id="${update.id}">${cancelledBanner(update.cancel_reason)}${row}</div>`;
   }
   return `<div class="hist-card" style="background:var(--type-${update.type}-list)" data-update-id="${update.id}">${row}</div>`;
 }
@@ -363,92 +365,6 @@ function metaLine(update, { skipDate = false } = {}) {
   }
   if (update.location) parts.push(escapeHtml(roomLabel(update.location)));
   return parts.join(" · ");
-}
-
-// ── Feedback ─────────────────────────────────────────────────────────────
-
-function feedbackToggleHtml(update) {
-  if (!update.accepts_feedback) return "";
-  return `<button type="button" class="btn feedback-toggle" data-feedback-toggle="${update.id}">Feedback</button>`;
-}
-
-function feedbackRowHtml(update) {
-  if (!update.accepts_feedback) return "";
-  return `
-  <div class="feedback-row" id="feedback-row-${update.id}">
-    <form class="feedback-form" data-feedback-form="${update.id}">
-      <div class="field"><label>Your feedback</label><textarea class="input" name="body" required placeholder="Share a thought about this post…"></textarea></div>
-      <div class="rating-row">Rating (optional):
-        ${[1, 2, 3, 4, 5].map((n) => `<button type="button" class="rating-star" data-rating="${n}">${n}</button>`).join("")}
-        <input type="hidden" name="rating" value="">
-      </div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <button type="submit" class="btn btn-primary">Submit</button>
-        <span class="feedback-status"></span>
-      </div>
-    </form>
-  </div>`;
-}
-
-function wireFeedbackDelegation() {
-  document.addEventListener("click", (e) => {
-    const toggleBtn = e.target.closest("[data-feedback-toggle]");
-    if (toggleBtn) {
-      const id = toggleBtn.dataset.feedbackToggle;
-      const row = document.getElementById(`feedback-row-${id}`);
-      row.classList.toggle("open");
-      return;
-    }
-    const star = e.target.closest(".rating-star");
-    if (star) {
-      const form = star.closest("form");
-      form.querySelectorAll(".rating-star").forEach((s) => s.classList.remove("selected"));
-      const value = Number(star.dataset.rating);
-      const current = Number(form.querySelector('input[name="rating"]').value);
-      const next = current === value ? 0 : value;
-      form.querySelector('input[name="rating"]').value = next || "";
-      if (next) {
-        form.querySelectorAll(".rating-star").forEach((s) => {
-          if (Number(s.dataset.rating) <= next) s.classList.add("selected");
-        });
-      }
-      return;
-    }
-  });
-
-  document.addEventListener("submit", async (e) => {
-    const form = e.target.closest("[data-feedback-form]");
-    if (!form) return;
-    e.preventDefault();
-    const updateId = form.dataset.feedbackForm;
-    const statusEl = form.querySelector(".feedback-status");
-    const submitBtn = form.querySelector('button[type="submit"]');
-    const body = form.querySelector('[name="body"]').value.trim();
-    const ratingRaw = form.querySelector('[name="rating"]').value;
-    if (!body) return;
-
-    submitBtn.disabled = true;
-    statusEl.textContent = "";
-    statusEl.className = "feedback-status";
-
-    const { error } = await supabase.from("feedback").insert({
-      update_id: updateId,
-      body,
-      rating: ratingRaw ? Number(ratingRaw) : null,
-    });
-
-    submitBtn.disabled = false;
-    if (error) {
-      console.error("Feedback submit failed", error);
-      statusEl.textContent = "Couldn't submit — try again.";
-      statusEl.className = "feedback-status feedback-error";
-      return;
-    }
-    form.reset();
-    form.querySelectorAll(".rating-star").forEach((s) => s.classList.remove("selected"));
-    statusEl.textContent = "Thanks — feedback sent.";
-    statusEl.className = "feedback-status feedback-sent";
-  });
 }
 
 function refreshRelativeTimestamps() {
@@ -493,6 +409,7 @@ function handleRealtimeEvent(payload) {
   const row = payload.new;
   if (!row || row.type === "exec_meeting") return; // RLS already blocks this for anon; defensive only
   if (row.status === "deleted") handleDeleted(row.id);
+  else if (row.pinned) handlePinned(row);
   else if (row.status === "cancelled") handleCancelled(row);
   else if (row.status === "active") handleActiveArrival(row);
 }
@@ -500,20 +417,50 @@ function handleRealtimeEvent(payload) {
 function removeFromSets(id) {
   todayRows = todayRows.filter((r) => r.id !== id);
   upcomingRows = upcomingRows.filter((r) => r.id !== id);
+  pinnedRows = pinnedRows.filter((r) => r.id !== id);
 }
 
-function handleActiveArrival(row) {
-  const now = new Date();
-  const bucket = bucketOf(row, now);
+// A post that was in the Earlier list has just been pinned: take its card (and
+// its date heading, if it was the only one that day) out of that list.
+function removeHistoryCard(id) {
+  const el = historyEl.querySelector(`[data-update-id="${id}"]`);
+  if (!el) return;
+  const group = el.closest(".hist-group");
+  el.remove();
+  if (group && !group.children.length) {
+    const heading = group.previousElementSibling;
+    if (heading?.classList.contains("date-heading")) heading.remove();
+    group.remove();
+  }
+  historyCount = historyEl.querySelectorAll(".hist-card").length;
+}
 
-  removeFromSets(row.id);
-  if (bucket === "history") {
-    const el = document.querySelector(`[data-update-id="${row.id}"]`);
-    if (el && historyEl.contains(el)) el.outerHTML = histCardHtml(row);
+// Start the Earlier list over (used when an unpinned post needs to slot back
+// into it).
+async function reloadHistory() {
+  timedOffset = 0;
+  untimedOffset = 0;
+  historyDone = false;
+  renderHistoryBatch(await fetchHistoryPage(new Date()));
+  updateLoadMoreVisibility();
+  syncEmptyState();
+}
+
+// Pinned posts: shown at the top, in any state except deleted. A change to a
+// post that is already pinned (cancelled, edited notes) updates its card in
+// place; a newly pinned post moves up from wherever it was.
+function handlePinned(row) {
+  const now = new Date();
+  const el = heroEl.querySelector(`[data-update-id="${row.id}"]`);
+  if (el && pinnedRows.some((r) => r.id === row.id)) {
+    pinnedRows = pinnedRows.map((r) => (r.id === row.id ? row : r));
+    el.outerHTML = heroCardHtml(row);
     return;
   }
 
-  (bucket === "today" ? todayRows : upcomingRows).push(row);
+  removeFromSets(row.id);
+  removeHistoryCard(row.id);
+  pinnedRows.push(row);
 
   if (isScrolledNearTop()) {
     renderToday(now);
@@ -523,21 +470,52 @@ function handleActiveArrival(row) {
   }
 }
 
+function handleActiveArrival(row) {
+  const now = new Date();
+  const bucket = bucketOf(row, now);
+  const wasPinned = pinnedRows.some((r) => r.id === row.id);
+
+  removeFromSets(row.id);
+  if (bucket === "history") {
+    if (wasPinned) {
+      // just unpinned: back into the Earlier list at its place
+      renderToday(now);
+      reloadHistory();
+      return;
+    }
+    const el = document.querySelector(`[data-update-id="${row.id}"]`);
+    if (el && historyEl.contains(el)) el.outerHTML = histCardHtml(row);
+    return;
+  }
+
+  (bucket === "today" ? todayRows : upcomingRows).push(row);
+
+  if (wasPinned || isScrolledNearTop()) {
+    renderToday(now);
+  } else {
+    hasDeferredTodayUpdate = true;
+    newUpdatePill.hidden = false;
+  }
+}
+
 function handleCancelled(row) {
   const now = new Date();
+  const wasPinned = pinnedRows.some((r) => r.id === row.id);
   const inToday = todayRows.some((r) => r.id === row.id);
   const inUpcoming = upcomingRows.some((r) => r.id === row.id);
 
-  if (inToday || inUpcoming) {
+  if (wasPinned || inToday || inUpcoming) {
     const wasHero = inToday && pickHero(todayRows, now)?.id === row.id;
     removeFromSets(row.id);
     const bucket = bucketOf(row, now);
     if (bucket === "today") todayRows.push(row);
     else if (bucket === "upcoming") upcomingRows.push(row);
 
-    if (wasHero || bucket === "history") {
+    if (wasPinned || wasHero || bucket === "history") {
       renderToday(now);
+      if (wasPinned && bucket === "history") reloadHistory();
     } else {
+      // Same spot in the same list, just marked cancelled.
       const el = document.querySelector(`[data-update-id="${row.id}"]`);
       if (el) el.outerHTML = listCardHtml(row);
     }
@@ -550,7 +528,7 @@ function handleCancelled(row) {
 
 function handleDeleted(id) {
   const el = document.querySelector(`[data-update-id="${id}"]`);
-  const inSets = todayRows.some((r) => r.id === id) || upcomingRows.some((r) => r.id === id);
+  const inSets = todayRows.some((r) => r.id === id) || upcomingRows.some((r) => r.id === id) || pinnedRows.some((r) => r.id === id);
 
   if (!el) {
     removeFromSets(id);

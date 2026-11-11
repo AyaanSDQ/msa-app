@@ -1,19 +1,15 @@
-import { icon } from "./icons.js?v=11";
+import { icon } from "./icons.js?v=12";
 
 // Per-type presentation, matching design-reference §15 accent table.
 export const TYPE_META = {
   prayer: { label: "Prayer", iconId: "i-minaret" },
   social: { label: "Social", iconId: "i-users" },
   announcement: { label: "Announcement", iconId: "i-mega" },
-  exec_meeting: { label: "Exec meeting", iconId: "i-case" },
 };
 
 export function typeBanner(type) {
   if (type === "announcement") {
     return `<img src="assets/images/announcement-banner.png" alt="Megaphone facing a crowd of silhouetted students">`;
-  }
-  if (type === "exec_meeting") {
-    return `<img src="assets/images/exec-meeting-banner.png" alt="Exec meeting around a table with a presenter at a chart">`;
   }
   const symbolId = type === "social" ? "banner-social" : "banner-mosque";
   return `<svg viewBox="0 0 400 132" preserveAspectRatio="xMidYMax slice" aria-hidden="true"><use href="#${symbolId}"></use></svg>`;
@@ -94,8 +90,10 @@ export function formatRelative(ts) {
   return `Updated ${diffDay} day${diffDay === 1 ? "" : "s"} ago`;
 }
 
-export function cancelledBanner() {
-  return `<div class="cancelled-banner">${icon("i-ban", { size: 14, stroke: 2.4 })}Cancelled</div>`;
+// The red "Cancelled" strip on a card, with the admin's reason when there is one.
+export function cancelledBanner(reason = "") {
+  const why = reason ? `<span class="cancel-why">${escapeHtml(reason)}</span>` : "";
+  return `<div class="cancelled-banner">${icon("i-ban", { size: 14, stroke: 2.9 })}<span>Cancelled</span>${why}</div>`;
 }
 
 // ── Room labels ──────────────────────────────────────────────────────────
@@ -110,24 +108,13 @@ export function roomLabel(location) {
   return b ? `${location} · Building ${b}` : location;
 }
 
-// ── Post presentation helpers (priority, pinned, images, event tiles) ────
-
-// Only plain http(s) image links are used.
-export function safeImageUrl(update) {
-  if (!update.image_url) return "";
-  try {
-    const u = new URL(update.image_url);
-    return u.protocol === "https:" || u.protocol === "http:" ? u.href : "";
-  } catch {
-    return "";
-  }
-}
+// ── Post presentation helpers (priority, pinned, event tiles) ────────────
 
 export function priorityOf(update) {
   return update.priority === "urgent" || update.priority === "important" ? update.priority : "normal";
 }
 
-// Events with a date (prayers, socials, meetings) get a calendar-style tile.
+// Events with a date (prayers and socials) get a calendar-style tile.
 export function isEventPost(update) {
   return !!update.event_time && update.type !== "announcement";
 }

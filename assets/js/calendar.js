@@ -1,10 +1,10 @@
 import { supabase } from "./supabase-client.js";
-import { icon } from "./icons.js?v=11";
-import { TYPE_META, escapeHtml, formatTime, roomLabel, emptyCardHtml } from "./shared.js?v=23";
+import { icon } from "./icons.js?v=12";
+import { TYPE_META, escapeHtml, formatTime, roomLabel, emptyCardHtml } from "./shared.js?v=24";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
-const CHIPS_PER_DAY = 2;
+const BARS_PER_DAY = 3; // colour bars shown in a day cell; the last one becomes "+N" when there are more
 const GRID_SLOTS = 42; // 6 weeks x 7 days
 
 const root = document.getElementById("calendar");
@@ -48,6 +48,7 @@ async function loadMonth() {
       .select("*")
       .not("event_time", "is", null)
       .neq("status", "deleted")
+      .neq("type", "exec_meeting")
       .gte("event_time", start.toISOString())
       .lt("event_time", end.toISOString())
       .order("event_time", { ascending: true });
@@ -68,14 +69,19 @@ function eventsByDay() {
   return map;
 }
 
-// "3:00 PM" -> "3 PM", "3:14 PM" stays as is
-function shortTime(ts) {
-  return formatTime(ts).replace(/:00(?=\s?[AP]M)/i, "");
+// One thin colour bar per event, in the colour of its type. Cancelled events
+// are drawn as an outline so they read as "not happening" at a glance.
+function barHtml(u) {
+  const cancelled = u.status === "cancelled" ? " is-cancelled" : "";
+  return `<span class="cal-bar${cancelled}" style="--c:var(--type-${u.type}-hero)"></span>`;
 }
 
-function chipHtml(u) {
-  const cancelled = u.status === "cancelled" ? " is-cancelled" : "";
-  return `<span class="cal-chip${cancelled}" style="--c:var(--type-${u.type}-hero)"><span class="t"><i></i><b>${shortTime(u.event_time)}</b></span><span class="n">${escapeHtml(u.title)}</span></span>`;
+function barsHtml(events) {
+  if (!events.length) return `<span class="cal-bars"></span>`;
+  const over = events.length > BARS_PER_DAY;
+  const shown = (over ? events.slice(0, BARS_PER_DAY - 1) : events).map(barHtml).join("");
+  const more = over ? `<span class="cal-more">+${events.length - (BARS_PER_DAY - 1)}</span>` : "";
+  return `<span class="cal-bars">${shown}${more}</span>`;
 }
 
 function render() {
@@ -105,7 +111,7 @@ function headHtml() {
 }
 
 function legendHtml() {
-  return `<div class="cal-legend">${Object.entries(TYPE_META).filter(([t]) => t !== "exec_meeting").map(([t, m]) => `<span><i style="background:var(--type-${t}-hero)"></i>${m.label}</span>`).join("")}</div>`;
+  return `<div class="cal-legend">${Object.entries(TYPE_META).map(([t, m]) => `<span><i style="background:var(--type-${t}-hero)"></i>${m.label}</span>`).join("")}</div>`;
 }
 
 function monthHtml(byDay) {
@@ -114,17 +120,17 @@ function monthHtml(byDay) {
 
   // Always 6 weeks (42 slots), with a faint dot under every slot including the
   // empty ones, so every month is the same height and the page never shifts.
-  const pad = `<span class="cal-day cal-pad" aria-hidden="true"><span class="cal-num"></span><span class="cal-chips"></span></span>`;
+  const pad = `<span class="cal-day cal-pad" aria-hidden="true"><span class="cal-num"></span><span class="cal-bars"></span></span>`;
   const cells = [];
   for (let i = 0; i < first.getDay(); i++) cells.push(pad);
   for (let day = 1; day <= daysInMonth; day++) {
     const date = new Date(viewYear, viewMonth, day);
     const events = byDay.get(dayKey(date)) || [];
-    const chips = events.slice(0, CHIPS_PER_DAY).map(chipHtml).join("");
-    const more = events.length > CHIPS_PER_DAY ? `<span class="cal-more">+${events.length - CHIPS_PER_DAY} more</span>` : "";
+    const lead = events.find((u) => u.status !== "cancelled") || events[0];
+    const tint = lead ? ` style="--tint:var(--type-${lead.type}-hero)"` : "";
     const cls = ["cal-day", sameDay(date, today) ? "today" : "", sameDay(date, selected) ? "selected" : "", events.length ? "has" : ""].filter(Boolean).join(" ");
     const label = `${MONTHS[viewMonth]} ${day}` + (events.length ? `, ${events.map((u) => `${u.title} at ${formatTime(u.event_time)}`).join("; ")}` : ", no events");
-    cells.push(`<button type="button" class="${cls}" data-day="${day}" aria-label="${escapeHtml(label)}" ${sameDay(date, selected) ? 'aria-pressed="true"' : ""}><span class="cal-num">${day}</span><span class="cal-chips">${chips}${more}</span></button>`);
+    cells.push(`<button type="button" class="${cls}"${tint} data-day="${day}" aria-label="${escapeHtml(label)}" ${sameDay(date, selected) ? 'aria-pressed="true"' : ""}><span class="cal-num">${day}</span>${barsHtml(events)}</button>`);
   }
   while (cells.length < GRID_SLOTS) cells.push(pad);
 
@@ -151,6 +157,7 @@ function dayPanel(byDay) {
   return `<section class="cal-panel">
     <div class="cal-panel-head">
       <div class="cal-panel-title">${escapeHtml(title)}</div>
+      ${!loading && events.length ? `<span class="cal-count">${events.length} ${events.length === 1 ? "event" : "events"}</span>` : ""}
     </div>
     ${body}
   </section>`;
@@ -211,18 +218,27 @@ function nextEventHint(byDay) {
   return `<button type="button" class="cal-next-hint" data-goto-day="${best.d}">Next: <strong>${label}</strong> · ${escapeHtml(best.list[0].title)}</button>`;
 }
 
+// Time split into "12:30" and "PM" for the big time block.
+function timeParts(ts) {
+  const [t, ap = ""] = formatTime(ts).split(/\s+/);
+  return { t, ap };
+}
+
 function eventCard(u) {
   const meta = TYPE_META[u.type];
+  if (!meta) return "";
   const cancelled = u.status === "cancelled";
-  return `<div class="cal-event ${cancelled ? "is-cancelled" : ""}" style="--c:var(--type-${u.type}-hero)">
-    <div class="cal-time">${formatTime(u.event_time)}</div>
-    <div class="cal-body">
-      <div class="list-kicker" style="color:var(--type-${u.type}-icon)">${meta.label}${cancelled ? " · Cancelled" : ""}</div>
-      <div class="list-title">${escapeHtml(u.title)}</div>
-      ${u.location ? `<div class="list-meta">${icon("i-pin", { size: 12, stroke: 2.5 })} ${escapeHtml(roomLabel(u.location))}</div>` : ""}
-      ${u.body ? `<p class="list-notes">${escapeHtml(u.body)}</p>` : ""}
+  const { t, ap } = timeParts(u.event_time);
+  return `<article class="cal-ev${cancelled ? " is-cancelled" : ""}" style="--c:var(--type-${u.type}-hero)">
+    <div class="cal-ev-time"><b>${escapeHtml(t)}</b>${ap ? `<span>${escapeHtml(ap)}</span>` : ""}</div>
+    <div class="cal-ev-body">
+      <div class="cal-ev-kicker"><i></i>${meta.label}</div>
+      <h3 class="cal-ev-title">${escapeHtml(u.title)}</h3>
+      ${u.location ? `<div class="cal-ev-meta">${icon("i-pin", { size: 13 })}${escapeHtml(roomLabel(u.location))}</div>` : ""}
+      ${u.body ? `<p class="cal-ev-notes">${escapeHtml(u.body)}</p>` : ""}
+      ${cancelled ? `<div class="cal-ev-cancel">Cancelled${u.cancel_reason ? `: ${escapeHtml(u.cancel_reason)}` : ""}</div>` : ""}
     </div>
-  </div>`;
+  </article>`;
 }
 
 function shiftMonth(delta) {
