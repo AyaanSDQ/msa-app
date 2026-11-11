@@ -218,19 +218,12 @@ function nextEventHint(byDay) {
   return `<button type="button" class="cal-next-hint" data-goto-day="${best.d}">Next: <strong>${label}</strong> · ${escapeHtml(best.list[0].title)}</button>`;
 }
 
-// Time split into "12:30" and "PM" for the big time block.
-function timeParts(ts) {
-  const [t, ap = ""] = formatTime(ts).split(/\s+/);
-  return { t, ap };
-}
-
 function eventCard(u) {
   const meta = TYPE_META[u.type];
   if (!meta) return "";
   const cancelled = u.status === "cancelled";
-  const { t, ap } = timeParts(u.event_time);
   return `<article class="cal-ev${cancelled ? " is-cancelled" : ""}" style="--c:var(--type-${u.type}-hero)">
-    <div class="cal-ev-time"><b>${escapeHtml(t)}</b>${ap ? `<span>${escapeHtml(ap)}</span>` : ""}</div>
+    <div class="cal-ev-time">${escapeHtml(formatTime(u.event_time))}</div>
     <div class="cal-ev-body">
       <div class="cal-ev-kicker"><i></i>${meta.label}</div>
       <h3 class="cal-ev-title">${escapeHtml(u.title)}</h3>

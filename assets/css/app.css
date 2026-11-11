@@ -1300,8 +1300,6 @@ body {
 
 .cal-ev { display: flex; align-items: stretch; gap: 12px; margin: 0 0 10px; padding: 12px; border-radius: 18px; background: var(--glass); border: 1px solid rgba(255, 255, 255, .85); box-shadow: var(--glass-shadow); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur); }
 .cal-ev-time { flex: none; width: 64px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; border-radius: 14px; background: color-mix(in srgb, var(--c) 13%, #fff); color: color-mix(in srgb, var(--c) 82%, #1b1626); box-shadow: 0 0 0 1px color-mix(in srgb, var(--c) 18%, #fff) inset; }
-.cal-ev-time b { font-size: 18px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.1; }
-.cal-ev-time span { font-size: 11px; font-weight: 750; letter-spacing: .06em; }
 .cal-ev-body { flex: 1; min-width: 0; padding: 2px 0; }
 .cal-ev-kicker { display: flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; color: color-mix(in srgb, var(--c) 85%, #1b1626); }
 .cal-ev-kicker i { width: 7px; height: 7px; border-radius: 50%; background: var(--c); flex: none; }
@@ -1322,7 +1320,6 @@ body {
   .calendar .cal-day .cal-num, .calendar .cal-grid .cal-num { min-width: 26px; height: 26px; font-size: 14px; }
   .cal-ev { gap: 10px; padding: 10px; }
   .cal-ev-time { width: 56px; }
-  .cal-ev-time b { font-size: 16px; }
 }
 @media (max-width: 340px) {
   .calendar .cal-bars { gap: 2px; }
@@ -1420,13 +1417,10 @@ body {
    of every event, so all times share one column, one size and one baseline. */
 .cal-ev { align-items: flex-start; }
 .cal-ev-time { align-self: flex-start; box-sizing: border-box; width: 64px; height: 60px; min-height: 60px; padding: 0; gap: 2px; text-align: center; white-space: nowrap; }
-.cal-ev-time b { display: block; min-width: 0; font-size: 18px; line-height: 1; font-variant-numeric: tabular-nums lining-nums; }
-.cal-ev-time span { display: block; font-size: 11px; line-height: 1; }
 .cal-ev-body { align-self: stretch; padding: 0; }
 .cal-ev-kicker { min-height: 14px; line-height: 14px; }
 @media (max-width: 340px) {
   .cal-ev-time { width: 56px; height: 54px; min-height: 54px; }
-  .cal-ev-time b { font-size: 16px; }
 }
 
 /* ══════════════ Round 7: calmer, modern depth ══════════════
@@ -1501,3 +1495,12 @@ body {
 .date-tile { background: #fff; border: 1px solid color-mix(in srgb, var(--c) 14%, #fff); box-shadow: 0 1px 2px rgba(45, 20, 80, .08), 0 3px 8px -4px color-mix(in srgb, var(--c) 30%, transparent); }
 .cal-ev-time { background: color-mix(in srgb, var(--c) 9%, #fff); border: 1px solid color-mix(in srgb, var(--c) 14%, #fff); box-shadow: 0 1px 2px rgba(45, 20, 80, .08), 0 3px 8px -4px color-mix(in srgb, var(--c) 30%, transparent); }
 .hero-media-icon { background: rgba(255, 255, 255, .16); border: 1px solid rgba(255, 255, 255, .3); box-shadow: 0 2px 6px -2px rgba(20, 5, 45, .3); }
+
+/* ══════════════ Round 11: calendar time is one flat line, "12:00 PM" ══════════════
+   A single text pill (no line break before the AM/PM), vertically centred on its event card. */
+.cal-ev { align-items: center; }
+.cal-ev-body { align-self: center; }
+.cal-ev-time { display: flex; align-items: center; justify-content: center; align-self: center; box-sizing: border-box; width: 82px; height: 34px; min-height: 0; padding: 0 6px; border-radius: 12px; font-size: 14.5px; font-weight: 750; letter-spacing: -0.01em; line-height: 1; font-variant-numeric: tabular-nums lining-nums; white-space: nowrap; color: color-mix(in srgb, var(--c) 82%, #1b1626); }
+@media (max-width: 340px) {
+  .cal-ev-time { width: 74px; height: 32px; font-size: 13.5px; padding: 0 4px; }
+}
