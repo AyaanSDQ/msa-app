@@ -1,5 +1,10 @@
 import { supabase } from "./supabase-client.js";
-import { icon } from "./icons.js?v=12";
+import { icon } from "./icons.js?v=13";
+import {
+  describeRule, describeEnds, expandSeries, nextActive, effectiveFields, endBefore, withChange, firstOccurrence,
+  isFirstOccurrence, overrideCount, parseKey, dateKey, addDays, startOfDay,
+} from "./recurrence.js?v=1";
+import { setupRepeat } from "./exec-repeat.js?v=1";
 import { TYPE_META, escapeHtml, formatTime, formatDateHeading, formatEventDate, localDateKey, roomLabel, cancelledBanner, animateRemove } from "./shared.js?v=25";
 
 const loginView = document.getElementById("login-view");
@@ -39,12 +44,21 @@ const cancelError = document.getElementById("cancel-error");
 const cancelBack = document.getElementById("cancel-back");
 const eventsCount = document.getElementById("events-count");
 const detailActionbar = document.getElementById("detail-actionbar");
+const occStrip = document.getElementById("occ-strip");
+const editForm = document.getElementById("edit-form");
+const editScope = document.getElementById("edit-scope");
+const editError = document.getElementById("edit-error");
+const deleteForm = document.getElementById("delete-form");
+const deleteScope = document.getElementById("delete-scope");
+const cancelScope = document.getElementById("cancel-scope");
 const detailHint = document.getElementById("detail-hint");
 
 let selectedType = "prayer";
 let currentUserId = null;
 let currentDetailUpdate = null;
 let execChannel = null;
+let detailOccDate = null; // for a repeating post: the date being looked at ("YYYY-MM-DD")
+let repeatCtl = null;
 
 
 init();
@@ -244,6 +258,8 @@ function execCardHtml(update) {
 
   if (update.status === "deleted") return "";
 
+  if (update.recurrence) return seriesCardHtml(update, meta);
+
   const pinned = update.pinned ? `<span class="kicker-badges"><span class="badge badge-pin">${icon("i-pushpin", { size: 13 })}Pinned</span></span>` : "";
   const body = `
     <div class="list-icon" style="color:var(--type-${update.type}-icon)">${icon(meta.iconId, { size: 22 })}</div>
@@ -261,6 +277,26 @@ function execCardHtml(update) {
     </div>`;
   }
   return `<div class="list-card exec-item" style="background:var(--type-${update.type}-list)" data-update-id="${update.id}">${body}</div>`;
+}
+
+// A repeating post is one row in the list: its rule and the next date, not one row per date.
+function seriesCardHtml(update, meta) {
+  const pinned = update.pinned ? `<span class="kicker-badges"><span class="badge badge-pin">${icon("i-pushpin", { size: 13 })}Pinned</span></span>` : "";
+  const next = nextActive(update, startOfDay(new Date()));
+  const when = next
+    ? `Next ${execMetaLine(next)}`
+    : "Ended";
+  const changes = overrideCount(update);
+  const meta2 = [describeRule(update.recurrence), when, changes ? `${changes} ${changes === 1 ? "change" : "changes"}` : ""].filter(Boolean).join(" · ");
+  return `<div class="list-card exec-item is-series" style="background:var(--type-${update.type}-list)" data-update-id="${update.id}">
+    <div class="list-icon" style="color:var(--type-${update.type}-icon)">${icon(meta.iconId, { size: 22 })}</div>
+    <div class="list-body">
+      <div class="list-kicker" style="color:var(--type-${update.type}-icon);--c:var(--type-${update.type}-hero)"><i></i>${meta.label}<span class="rec-mark">${icon("i-repeat", { size: 12 })}Repeats</span>${pinned}</div>
+      <div class="list-title">${escapeHtml(update.title)}</div>
+      <div class="list-meta">${escapeHtml(meta2)}</div>
+    </div>
+    ${icon("i-chev", { size: 15 })}
+  </div>`;
 }
 
 function execMetaLine(update) {
@@ -284,6 +320,7 @@ function syncSubmitState() {
 }
 
 function wireNewPostForm() {
+  repeatCtl = setupRepeat(postForm);
   postForm.event_time.addEventListener("input", syncSubmitState);
   postForm.event_time.addEventListener("change", syncSubmitState);
   syncSubmitState();
@@ -332,6 +369,14 @@ function wireNewPostForm() {
       return;
     }
 
+    const repeat = repeatCtl.build();
+    if (repeat.error) {
+      formError.textContent = repeat.error;
+      formError.hidden = false;
+      syncSubmitState();
+      return;
+    }
+
     const payload = {
       type: selectedType,
       title,
@@ -340,6 +385,13 @@ function wireNewPostForm() {
       body: body || null,
       posted_by: currentUserId,
     };
+    if (repeat.rule) {
+      // The post's own time is the first date the rule actually produces.
+      const first = firstOccurrence(repeat.rule);
+      const [hh, mm] = repeat.rule.time.split(":").map(Number);
+      payload.event_time = new Date(first.getFullYear(), first.getMonth(), first.getDate(), hh, mm).toISOString();
+      payload.recurrence = repeat.rule;
+    }
     // Optional presentation fields are only sent when used.
     const priority = postForm.priority.value;
     const pinned = postForm.pinned.checked;
@@ -353,7 +405,9 @@ function wireNewPostForm() {
 
     if (error) {
       console.error("Post failed", error);
-      formError.textContent = usesExtras
+      formError.textContent = repeat.rule
+        ? "Couldn't post the repeating post. Make sure the latest database migration (recurring posts) has been applied."
+        : usesExtras
         ? "Couldn't post. If you used a priority or pin, make sure the latest database migration has been applied."
         : "Couldn't post — check the required fields and try again.";
       formError.hidden = false;
@@ -361,6 +415,7 @@ function wireNewPostForm() {
     }
 
     postForm.reset();
+    repeatCtl.reset();
     selectedType = "prayer";
     typeGrid.querySelectorAll(".type-option").forEach((b) => b.classList.toggle("selected", b.dataset.type === "prayer"));
     locationLabel.textContent = "Room number";
@@ -389,6 +444,14 @@ function wireDetailView() {
 
     // Cancelling asks for a short reason first (shown to readers).
     if (action === "cancel") return openCancelForm();
+    if (isSeries(currentDetailUpdate)) {
+      if (action === "edit") return openEditForm();
+      if (action === "restore-occ") return restoreOccurrence();
+      if (action === "delete") {
+        deleteScope.innerHTML = scopeGroupHtml("delete-scope", scopeOptions("delete", currentDetailUpdate, detailOccDate));
+        return openPanel(deleteForm);
+      }
+    }
 
     // Pin / Unpin only flips the pinned flag; the rest change status.
     let changes;
@@ -405,6 +468,17 @@ function wireDetailView() {
 
   cancelBack.addEventListener("click", closeCancelForm);
 
+  occStrip.addEventListener("click", (e) => {
+    const chip = e.target.closest("[data-occ]");
+    if (!chip || !currentDetailUpdate) return;
+    detailOccDate = chip.dataset.occ;
+    renderSeriesDetail();
+  });
+  editForm.addEventListener("submit", (e) => { e.preventDefault(); submitEdit(); });
+  document.getElementById("edit-back").addEventListener("click", closeCancelForm);
+  deleteForm.addEventListener("submit", (e) => { e.preventDefault(); submitSeriesDelete(); });
+  document.getElementById("delete-back").addEventListener("click", closeCancelForm);
+
   cancelForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     const reason = cancelReasonInput.value.trim().slice(0, 99);
@@ -413,6 +487,7 @@ function wireDetailView() {
       cancelError.hidden = false;
       return;
     }
+    if (isSeries(currentDetailUpdate)) return submitSeriesCancel(reason);
     await applyChanges({ status: "cancelled", cancel_reason: reason }, "cancel");
   });
 
@@ -471,26 +546,233 @@ async function applyChanges(changes, action) {
   }
 
   Object.assign(target, changes);
+  if (isSeries(target)) return renderSeriesDetail();
   closeCancelForm();
   renderDetailCard(target);
   renderNotes(target);
   renderActionBar(target);
 }
 
+const panels = [cancelForm, editForm, deleteForm];
+
+function openPanel(panel) {
+  panels.forEach((p) => { p.hidden = p !== panel; });
+  detailActionbar.hidden = true;
+  detailHint.hidden = true;
+}
+
 function openCancelForm() {
   cancelReasonInput.value = "";
   cancelCount.textContent = "0";
   cancelError.hidden = true;
-  cancelForm.hidden = false;
-  detailActionbar.hidden = true;
-  detailHint.hidden = true;
+  const series = isSeries(currentDetailUpdate);
+  cancelScope.hidden = !series;
+  if (series) {
+    cancelScope.innerHTML = scopeGroupHtml("cancel-scope", scopeOptions("cancel", currentDetailUpdate, detailOccDate));
+    cancelForm.querySelector('button[type="submit"]').textContent = "Cancel";
+  } else {
+    cancelForm.querySelector('button[type="submit"]').textContent = "Cancel this post";
+  }
+  openPanel(cancelForm);
   cancelReasonInput.focus();
 }
 
 function closeCancelForm() {
-  cancelForm.hidden = true;
+  panels.forEach((p) => { p.hidden = true; });
   detailActionbar.hidden = false;
   detailHint.hidden = false;
+}
+
+// ── Repeating posts: dates, scope and saving ────────────────────────────
+
+const isSeries = (u) => !!u?.recurrence;
+
+function shortDateLabel(dateStr) {
+  return parseKey(dateStr).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+}
+
+// The occurrence being looked at, or null if that date is not (or no longer) one.
+function occurrenceOf(row, dateStr) {
+  if (!dateStr) return null;
+  const d = parseKey(dateStr);
+  return expandSeries(row, d, d)[0] || null;
+}
+
+function defaultOccurrenceDate(row) {
+  const next = nextActive(row, startOfDay(new Date()));
+  if (next) return next.occurrence_date;
+  const past = expandSeries(row, parseKey(row.recurrence.start), startOfDay(new Date()));
+  return past.length ? past[past.length - 1].occurrence_date : null;
+}
+
+// What the admin can apply an action to. "This and all future" is not offered on the first
+// date (that is the same as the whole series), and cancelling never offers the whole series.
+function scopeOptions(kind, row, date) {
+  const first = isFirstOccurrence(row.recurrence, date);
+  const label = shortDateLabel(date);
+  const opts = [{ value: "occurrence", label: "This occurrence", hint: label }];
+  if (!first) opts.push({ value: "future", label: "This and all future", hint: kind === "cancel" ? `Cancels ${label} and ends the series there` : `From ${label} on` });
+  if (kind !== "cancel") opts.push({ value: "all", label: "All occurrences", hint: "The whole series, including past dates" });
+  return opts;
+}
+
+function scopeGroupHtml(name, options) {
+  return `<legend class="scope-legend">Apply to</legend>` + options.map((o, i) =>
+    `<label class="scope-opt"><input type="radio" name="${name}" value="${o.value}"${i === 0 ? " checked" : ""}><span><b>${escapeHtml(o.label)}</b><small>${escapeHtml(o.hint || "")}</small></span></label>`).join("");
+}
+
+const readScope = (container) => container.querySelector("input:checked")?.value || "occurrence";
+
+// A short strip of dates: the last two and the next several. Tap one to look at it.
+function renderOccStrip(row) {
+  const today = startOfDay(new Date());
+  const list = [
+    ...expandSeries(row, addDays(today, -60), addDays(today, -1)).slice(-2),
+    ...expandSeries(row, today, addDays(today, 180)).slice(0, 8),
+  ];
+  if (detailOccDate && !list.some((o) => o.occurrence_date === detailOccDate)) {
+    const picked = occurrenceOf(row, detailOccDate);
+    if (picked) list.push(picked);
+    list.sort((a, b) => (a.occurrence_date < b.occurrence_date ? -1 : 1));
+  }
+  occStrip.hidden = false;
+  occStrip.innerHTML = `<div class="occ-label">Dates</div><div class="occ-chips">${
+    list.length
+      ? list.map((o) => `<button type="button" class="occ-chip${o.occurrence_date === detailOccDate ? " selected" : ""}${o.status === "cancelled" ? " is-cancelled" : ""}${new Date(o.event_time) < new Date() ? " is-past" : ""}" data-occ="${o.occurrence_date}">${escapeHtml(shortDateLabel(o.occurrence_date))}</button>`).join("")
+      : `<span class="form-hint">No dates left in this series.</span>`
+  }</div>`;
+}
+
+function renderSeriesDetail() {
+  const row = currentDetailUpdate;
+  if (!occurrenceOf(row, detailOccDate)) detailOccDate = defaultOccurrenceDate(row);
+  closeCancelForm();
+  renderDetailCard(row);
+  renderOccStrip(row);
+  renderNotes(row);
+  renderActionBar(row);
+}
+
+async function saveSeries(patch, failMessage) {
+  const target = currentDetailUpdate;
+  detailActionbar.querySelectorAll("button").forEach((b) => (b.disabled = true));
+  const { error } = await supabase.from("updates").update(patch).eq("id", target.id);
+  detailActionbar.querySelectorAll("button").forEach((b) => (b.disabled = false));
+  if (error) {
+    console.error("Failed to save repeating post", error);
+    detailHint.textContent = failMessage || "Couldn't save that change. Try again.";
+    return false;
+  }
+  Object.assign(target, patch);
+  return true;
+}
+
+// Remove some fields from every override on/after a date and every "from" change after it
+// (used when a wider edit makes them pointless).
+function stripFields(row, keys, fromDate) {
+  const overrides = {};
+  for (const [d, ov] of Object.entries(row.occurrence_overrides || {})) {
+    const copy = { ...ov };
+    if (!fromDate || d >= fromDate) keys.forEach((k) => delete copy[k]);
+    if (Object.keys(copy).length) overrides[d] = copy;
+  }
+  const changes = [];
+  for (const c of row.recurrence.changes || []) {
+    const copy = { ...c };
+    if (!fromDate || c.from > fromDate) keys.forEach((k) => delete copy[k]);
+    if (Object.keys(copy).length > 1) changes.push(copy);
+  }
+  return { overrides, changes };
+}
+
+function openEditForm() {
+  const row = currentDetailUpdate;
+  const f = effectiveFields(row, detailOccDate);
+  editForm.title.value = f.title || "";
+  editForm.location.value = f.location || "";
+  editForm.time.value = f.time || "";
+  editForm.body.value = f.body || "";
+  editError.hidden = true;
+  editScope.innerHTML = scopeGroupHtml("edit-scope", scopeOptions("edit", row, detailOccDate));
+  openPanel(editForm);
+  editForm.title.focus();
+}
+
+async function submitEdit() {
+  const row = currentDetailUpdate;
+  const date = detailOccDate;
+  const f = effectiveFields(row, date);
+  const next = {
+    title: editForm.title.value.trim(),
+    location: editForm.location.value.trim() || null,
+    time: editForm.time.value,
+    body: editForm.body.value.trim() || null,
+  };
+  if (!next.title) { editError.textContent = "Title is required."; editError.hidden = false; return; }
+  if (!next.time) { editError.textContent = "Time is required."; editError.hidden = false; return; }
+
+  const changed = {};
+  for (const k of ["title", "location", "time", "body"]) if ((next[k] || null) !== (f[k] || null)) changed[k] = next[k];
+  if (!Object.keys(changed).length) return closeCancelForm();
+  const keys = Object.keys(changed);
+  const scope = readScope(editScope);
+  let patch;
+
+  if (scope === "occurrence") {
+    patch = { occurrence_overrides: { ...(row.occurrence_overrides || {}), [date]: { ...((row.occurrence_overrides || {})[date] || {}), ...changed } } };
+  } else if (scope === "future") {
+    const { overrides, changes } = stripFields(row, keys, date);
+    patch = { recurrence: withChange({ ...row.recurrence, changes }, date, changed), occurrence_overrides: overrides };
+  } else {
+    const { overrides, changes } = stripFields(row, keys, null);
+    const rule = { ...row.recurrence, changes, ...(changed.time ? { time: changed.time } : {}) };
+    patch = { recurrence: rule, occurrence_overrides: overrides };
+    for (const k of ["title", "location", "body"]) if (k in changed) patch[k] = changed[k];
+    if (changed.time) {
+      const first = firstOccurrence(rule);
+      const [hh, mm] = rule.time.split(":").map(Number);
+      patch.event_time = new Date(first.getFullYear(), first.getMonth(), first.getDate(), hh, mm).toISOString();
+    }
+  }
+  if (await saveSeries(patch, "Couldn't save those changes. Try again.")) renderSeriesDetail();
+}
+
+// Cancel one date, or this date and everything after it.
+async function submitSeriesCancel(reason) {
+  const row = currentDetailUpdate;
+  const date = detailOccDate;
+  const scope = readScope(cancelScope);
+  const overrides = { ...(row.occurrence_overrides || {}), [date]: { ...((row.occurrence_overrides || {})[date] || {}), status: "cancelled", cancel_reason: reason } };
+  const patch = { occurrence_overrides: overrides };
+  if (scope === "future") {
+    const cur = row.recurrence.ends?.type === "on" ? row.recurrence.ends.date : null;
+    patch.recurrence = { ...row.recurrence, ends: { type: "on", date: cur && cur < date ? cur : date } };
+  }
+  if (await saveSeries(patch, "Couldn't cancel. Check your connection and try again.")) renderSeriesDetail();
+  else { cancelError.textContent = "Couldn't cancel. Check your connection and try again."; cancelError.hidden = false; }
+}
+
+async function submitSeriesDelete() {
+  const row = currentDetailUpdate;
+  const date = detailOccDate;
+  const scope = readScope(deleteScope);
+  if (scope === "all") return applyChanges({ status: "deleted" }, "delete");
+  const patch = scope === "future"
+    ? { recurrence: endBefore(row.recurrence, date) }
+    : { occurrence_overrides: { ...(row.occurrence_overrides || {}), [date]: { ...((row.occurrence_overrides || {})[date] || {}), status: "deleted" } } };
+  if (await saveSeries(patch, "Couldn't delete. Try again.")) renderSeriesDetail();
+}
+
+// Put a cancelled date back.
+async function restoreOccurrence() {
+  const row = currentDetailUpdate;
+  const overrides = { ...(row.occurrence_overrides || {}) };
+  const ov = { ...(overrides[detailOccDate] || {}) };
+  delete ov.status;
+  delete ov.cancel_reason;
+  if (Object.keys(ov).length) overrides[detailOccDate] = ov;
+  else delete overrides[detailOccDate];
+  if (await saveSeries({ occurrence_overrides: overrides }, "Couldn't restore that date. Try again.")) renderSeriesDetail();
 }
 
 async function openDetail(updateId) {
@@ -517,12 +799,21 @@ async function openDetail(updateId) {
   currentDetailUpdate = update;
   detailContent.hidden = false;
 
+  occStrip.hidden = true;
+  if (isSeries(update)) {
+    detailOccDate = defaultOccurrenceDate(update);
+    return renderSeriesDetail();
+  }
   renderDetailCard(update);
   renderNotes(update);
   renderActionBar(update);
 }
 
-function renderDetailCard(update) {
+function renderDetailCard(post) {
+  // For a repeating post the card shows the date picked in the strip, with the series rule under it.
+  const series = isSeries(post);
+  const occ = series ? occurrenceOf(post, detailOccDate) : null;
+  const update = occ ? { ...occ, pinned: post.pinned } : post;
   const meta = TYPE_META[update.type];
   const statusLabel = update.status === "cancelled" ? "Cancelled" : update.status === "deleted" ? "Deleted" : "Active";
 
@@ -548,9 +839,10 @@ function renderDetailCard(update) {
         </div>
         <h2 class="hero-title">${escapeHtml(update.title)}</h2>
         ${chips.length ? `<div class="hero-chips">${chips.join("")}</div>` : ""}
+        ${series ? `<div class="rule-line">${icon("i-repeat", { size: 14 })}${escapeHtml([describeRule(post.recurrence), describeEnds(post.recurrence)].filter(Boolean).join(" · "))}</div>` : ""}
         ${update.body ? `<p class="hero-notes">${escapeHtml(update.body)}</p>` : ""}
         <div class="detail-meta-grid">
-          <div><div class="detail-meta-label">Created</div>${formatDateHeading(new Date(update.created_at))} ${formatTime(update.created_at)}</div>
+          <div><div class="detail-meta-label">Created</div>${formatDateHeading(new Date(post.created_at))} ${formatTime(post.created_at)}</div>
           <div><div class="detail-meta-label">Status</div>${statusLabel}</div>
           ${reason}
         </div>
@@ -561,6 +853,10 @@ function renderDetailCard(update) {
 // The notes box always belongs to the post that is open.
 function renderNotes(update) {
   const deleted = update.status === "deleted";
+  if (isSeries(update)) {
+    notesForm.hidden = true; // a repeating post is edited with the Edit form, which asks which dates to change
+    return;
+  }
   notesInput.value = update.body || "";
   notesInput.disabled = deleted;
   notesForm.querySelector('button[type="submit"]').disabled = deleted;
@@ -577,6 +873,20 @@ function pinButtonHtml(update) {
 }
 
 function renderActionBar(update) {
+  if (isSeries(update)) {
+    const occ = occurrenceOf(update, detailOccDate);
+    const edit = `<button type="button" class="btn btn-secondary" data-action="edit">Edit</button>`;
+    const del = `<button type="button" class="btn btn-delete-action" data-action="delete">Delete</button>`;
+    detailActionbar.innerHTML = !occ
+      ? del
+      : `${pinButtonHtml({ ...update, status: "active" })}${edit}${occ.status === "cancelled"
+        ? `<button type="button" class="btn btn-restore-action" data-action="restore-occ">Restore</button>`
+        : `<button type="button" class="btn btn-cancel-action" data-action="cancel">Cancel</button>`}${del}`;
+    detailHint.textContent = occ
+      ? `Repeating post. Changes apply to ${shortDateLabel(detailOccDate)} unless you choose more dates.`
+      : "No dates left in this series.";
+    return;
+  }
   if (update.status === "active") {
     detailActionbar.innerHTML = `
       ${pinButtonHtml(update)}

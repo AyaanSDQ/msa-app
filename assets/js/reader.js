@@ -1,5 +1,5 @@
 import { supabase } from "./supabase-client.js";
-import { icon } from "./icons.js?v=12";
+import { icon } from "./icons.js?v=13";
 import {
   TYPE_META,
   typeBanner,
@@ -21,6 +21,7 @@ import {
   emptyCardHtml,
   animateRemove,
 } from "./shared.js?v=25";
+import { expandSeries, nextActive, describeRule, parseKey, addDays, startOfDay } from "./recurrence.js?v=1";
 
 const PAGE_SIZE = 20;
 const heroEl = document.getElementById("hero");
@@ -60,6 +61,16 @@ let pinnedRows = [];
 let cancelledRows = [];
 let hasDeferredTodayUpdate = false;
 
+// Repeating posts: one row each in `updates`. Their occurrences are worked out
+// here (recurrence.js) and dropped into the same sets as ordinary posts, tagged
+// is_occurrence, so the rest of the page treats them like any other post.
+let seriesRows = [];
+let seriesReady = Promise.resolve();
+// The lower edge of the history shown so far, so each page of "Earlier" also
+// picks up the repeating posts that fall in the stretch it covers.
+let historyUpper = null;
+const HISTORY_FLOOR_DAYS = 365;
+
 // Realtime events can arrive before the initial fetch finishes; buffer them
 // and replay after so nothing is lost and the empty state never shows stale.
 let initialFetchDone = false;
@@ -71,11 +82,13 @@ async function init() {
   setupRealtime();
 
   const now = new Date();
-  const [{ today, upcoming }, historyRows, pinned, cancelled] = await Promise.all([fetchTodayAndUpcoming(now), fetchHistoryPage(now), fetchPinned(), fetchCancelled()]);
+  seriesReady = fetchSeries().then((rows) => { seriesRows = rows; });
+  const [{ today, upcoming }, historyRows, pinned, cancelled] = await Promise.all([fetchTodayAndUpcoming(now), fetchHistoryPage(now), fetchPinned(), fetchCancelled(), seriesReady]);
   todayRows = today;
   upcomingRows = upcoming;
   pinnedRows = pinned;
   cancelledRows = cancelled;
+  applySeries(now);
 
   renderHistoryBatch(historyRows);
   renderToday(now);
@@ -119,7 +132,7 @@ async function fetchTodayAndUpcoming(now) {
   ]);
   if (todayRes.error) console.error("Failed to load today's updates", todayRes.error);
   if (upcomingRes.error) console.error("Failed to load upcoming updates", upcomingRes.error);
-  const regular = (r) => !r.pinned && r.status !== "cancelled";
+  const regular = (r) => !r.pinned && r.status !== "cancelled" && !r.recurrence;
   return { today: (todayRes.data || []).filter(regular), upcoming: (upcomingRes.data || []).filter(regular) };
 }
 
@@ -128,14 +141,14 @@ async function fetchTodayAndUpcoming(now) {
 async function fetchPinned() {
   const { data, error } = await baseQuery().eq("pinned", true);
   if (error) console.error("Failed to load pinned updates", error);
-  return sortPinned((data || []).filter((r) => r.status === "active"));
+  return sortPinned((data || []).filter((r) => r.status === "active" && !r.recurrence));
 }
 
 // Every cancelled post, whatever its date or pin state.
 async function fetchCancelled() {
   const { data, error } = await baseQuery().eq("status", "cancelled");
   if (error) console.error("Failed to load cancelled updates", error);
-  return sortCancelled(data || []);
+  return sortCancelled((data || []).filter((r) => !r.recurrence));
 }
 
 // Cancellations still ahead come first (soonest first), then past ones (most
@@ -150,6 +163,83 @@ function sortCancelled(rows) {
 
 function sortPinned(rows) {
   return [...rows].sort((a, b) => postWeight(b) - postWeight(a) || new Date(b.created_at) - new Date(a.created_at));
+}
+
+// ── Repeating posts ─────────────────────────────────────────────────────
+
+async function fetchSeries() {
+  const { data, error } = await supabase
+    .from("updates")
+    .select("*")
+    .not("recurrence", "is", null)
+    .neq("status", "deleted")
+    .neq("type", "exec_meeting");
+  if (error) console.error("Failed to load repeating posts", error);
+  return data || [];
+}
+
+// Where each series puts its occurrences: today's (and the next one) in the
+// lists, cancelled ones in the cancelled cards, and a pinned series as one
+// pinned card (today's occurrence, otherwise the next).
+function seriesBuckets(now) {
+  const today = startOfDay(now);
+  const out = { today: [], upcoming: [], pinned: [], cancelled: [] };
+  for (const row of seriesRows) {
+    const rule = row.recurrence;
+    if (!rule || row.status === "deleted") continue;
+    for (const o of expandSeries(row, parseKey(rule.start), addDays(today, 180))) if (o.status === "cancelled") out.cancelled.push(o);
+    const todays = expandSeries(row, today, today).find((o) => o.status === "active");
+    const next = nextActive(row, addDays(today, 1));
+    if (row.pinned) {
+      const featured = todays || next;
+      if (featured) out.pinned.push(featured);
+      continue;
+    }
+    if (todays) out.today.push(todays);
+    if (next) out.upcoming.push(next);
+  }
+  return out;
+}
+
+// Replace every occurrence in the page's sets with a fresh set (no rendering).
+function applySeries(now) {
+  const own = (r) => !r.is_occurrence;
+  const b = seriesBuckets(now);
+  todayRows = [...todayRows.filter(own), ...b.today];
+  upcomingRows = [...upcomingRows.filter(own), ...b.upcoming];
+  pinnedRows = [...pinnedRows.filter(own), ...b.pinned];
+  cancelledRows = [...cancelledRows.filter(own), ...b.cancelled];
+}
+
+function historyFloor(now) {
+  const today = startOfDay(now);
+  let floor = today;
+  for (const r of seriesRows) {
+    if (r.pinned || !r.recurrence) continue;
+    const start = parseKey(r.recurrence.start);
+    if (start < floor) floor = start;
+  }
+  const limit = addDays(today, -HISTORY_FLOOR_DAYS);
+  return floor < limit ? limit : floor;
+}
+
+// Past occurrences with lower <= time < upper.
+function pastOccurrences(lower, upper) {
+  const out = [];
+  for (const row of seriesRows) {
+    if (row.pinned || !row.recurrence) continue;
+    for (const o of expandSeries(row, startOfDay(lower), startOfDay(upper))) {
+      const t = new Date(o.event_time);
+      if (o.status === "active" && t >= lower && t < upper) out.push(o);
+    }
+  }
+  return out;
+}
+
+function recMark(update) {
+  if (!update.is_occurrence) return "";
+  const rule = describeRule(update.recurrence);
+  return `<span class="rec-mark" title="${escapeHtml(rule)}">${icon("i-repeat", { size: 12 })}${escapeHtml(rule.split(" · ")[0])}</span>`;
 }
 
 // One page of history (everything whose effective time is before today),
@@ -175,9 +265,18 @@ async function fetchHistoryPage(now) {
   timedOffset += t;
   untimedOffset += u;
   historyDone = page.length < PAGE_SIZE;
+
+  // Repeating posts' past occurrences fill the stretch of time this page covers
+  // (down to the oldest row on it, or all the way back on the last page).
+  await seriesReady;
+  const upper = historyUpper || startOfDay(now);
+  const lower = historyDone ? historyFloor(now) : new Date(effectiveTime(page[page.length - 1]));
+  historyUpper = lower;
+  const past = pastOccurrences(lower, upper);
+
   // Pinned and cancelled posts live at the top; they are skipped here but still
   // counted in the offsets above, so paging stays stable.
-  return page.filter((r) => !r.pinned && r.status !== "cancelled").sort((a, b) => new Date(effectiveTime(b)) - new Date(effectiveTime(a)) || tiebreak(a, b));
+  return [...page.filter((r) => !r.pinned && r.status !== "cancelled" && !r.recurrence), ...past].sort((a, b) => new Date(effectiveTime(b)) - new Date(effectiveTime(a)) || tiebreak(a, b));
 }
 
 async function handleLoadMore() {
@@ -325,7 +424,7 @@ function heroCardHtml(update) {
   <article class="hero-card hero-v2" style="--c:var(--type-${update.type}-hero)" data-update-id="${update.id}">
     ${media}
     <div class="hero-body">
-      <div class="hero-eyebrow"><span class="hero-type"><i></i>${meta.label}</span></div>
+      <div class="hero-eyebrow"><span class="hero-type"><i></i>${meta.label}</span>${recMark(update)}</div>
       <h2 class="hero-title">${escapeHtml(update.title)}</h2>
       ${chipsHtml(update)}
       ${update.body ? `<p class="hero-notes">${escapeHtml(update.body)}</p>` : ""}
@@ -349,7 +448,7 @@ function cancelHeroHtml(update) {
     ${tape}
     ${media}
     <div class="hero-body">
-      <div class="hero-eyebrow"><span class="hero-type"><i></i>${meta.label}</span></div>
+      <div class="hero-eyebrow"><span class="hero-type"><i></i>${meta.label}</span>${recMark(update)}</div>
       <h2 class="hero-title">${escapeHtml(update.title)}</h2>
       ${chipsHtml(update)}
       ${update.body ? `<p class="hero-notes">${escapeHtml(update.body)}</p>` : ""}
@@ -382,7 +481,7 @@ function listCardHtml(update) {
   const body = `
     ${lead}
     <div class="list-body">
-      <div class="list-kicker" style="color:var(--type-${update.type}-icon)"><i></i>${meta.label}${badges ? `<span class="kicker-badges">${badges}</span>` : ""}</div>
+      <div class="list-kicker" style="color:var(--type-${update.type}-icon)"><i></i>${meta.label}${recMark(update)}${badges ? `<span class="kicker-badges">${badges}</span>` : ""}</div>
       <div class="list-title">${escapeHtml(update.title)}</div>
       <div class="list-meta">${metaLine(update, { skipDate: event })}</div>
       ${update.body ? `<p class="list-notes">${escapeHtml(update.body)}</p>` : ""}
@@ -439,7 +538,7 @@ function refreshRelativeTimestamps() {
 function maybeScrollToAnchor() {
   if (!location.hash) return;
   const id = location.hash.replace("#post-", "");
-  const el = document.querySelector(`[data-update-id="${id}"]`);
+  const el = document.querySelector(`[data-update-id="${id}"]`) || document.querySelector(`[data-update-id^="${id}@"]`);
   if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
@@ -467,10 +566,32 @@ function setupRealtime() {
 function handleRealtimeEvent(payload) {
   const row = payload.new;
   if (!row || row.type === "exec_meeting") return; // RLS already blocks this for anon; defensive only
+  if (row.recurrence || seriesRows.some((s) => s.id === row.id)) return handleSeriesEvent(row);
   if (row.status === "deleted") handleDeleted(row.id);
   else if (row.status === "cancelled") handleCancelled(row);
   else if (row.pinned) handlePinned(row);
   else if (row.status === "active") handleActiveArrival(row);
+}
+
+// A repeating post was created, edited (a cancelled date, a new rule) or deleted:
+// rebuild all of its occurrences. A deleted series slides out first.
+function handleSeriesEvent(row) {
+  const now = new Date();
+  const deleted = row.status === "deleted" || !row.recurrence;
+  seriesRows = seriesRows.filter((s) => s.id !== row.id);
+  if (!deleted) seriesRows.push(row);
+
+  const apply = () => {
+    applySeries(now);
+    showTopChange(now);
+    reloadHistory();
+  };
+
+  const gone = deleted ? [...document.querySelectorAll(`[data-update-id^="${row.id}@"]`)] : [];
+  if (!gone.length) return apply();
+  applySeries(now); // drop the data now so nothing re-renders the cards mid-animation
+  let left = gone.length;
+  gone.forEach((el) => animateRemove(el, () => { if (--left === 0) apply(); }));
 }
 
 function removeFromSets(id) {
@@ -500,6 +621,7 @@ function removeHistoryCard(id) {
 async function reloadHistory() {
   timedOffset = 0;
   untimedOffset = 0;
+  historyUpper = null;
   historyDone = false;
   renderHistoryBatch(await fetchHistoryPage(new Date()));
   updateLoadMoreVisibility();

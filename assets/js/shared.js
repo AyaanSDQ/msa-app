@@ -1,4 +1,4 @@
-import { icon } from "./icons.js?v=12";
+import { icon } from "./icons.js?v=13";
 
 // Per-type presentation, matching design-reference §15 accent table.
 export const TYPE_META = {

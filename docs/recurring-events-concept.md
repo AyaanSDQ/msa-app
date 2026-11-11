@@ -1,6 +1,6 @@
 # Recurring events: concept
 
-Status: proposal only. Nothing in this document is built yet.
+Status: built (all three phases). The design notes below describe what the app does and why.
 
 ## The idea in one paragraph
 
@@ -64,55 +64,50 @@ A one-off post never shows the scope sheet, so today's workflow is unchanged.
 - **Pinning a series:** the pinned hero card shows the next upcoming occurrence.
 - **Past occurrences:** appear in "Earlier" as normal posts for their date, so history is accurate.
 
-## How it fits the data model
+## How it is built
 
-Two small additions, both backwards compatible (a post with no series behaves exactly as today).
+All three phases are built. The final design is simpler than the two-table proposal first sketched here: **a repeating post is one row in `updates`** with two extra `jsonb` columns (migration `20261112000000_recurring_posts.sql`). A post with no rule is untouched.
 
-**`recurrence_rules`** (one row per series, owned by the first post):
-
-| column | purpose |
+| column | holds |
 |---|---|
-| `id` | primary key |
-| `update_id` | the "template" post (title, type, room, notes, time of day, priority) |
-| `freq` | `daily`, `weekly`, `monthly` |
-| `interval` | 1 for the plain options, N for Custom |
-| `by_weekday` | integer array (0 to 6) for weekly rules |
-| `by_month_day` / `by_nth_weekday` | monthly rules |
-| `starts_on`, `ends_on`, `max_count` | the start date and the optional end (a date or a count) |
-| `timezone` | the club's timezone, so "7:00 PM" stays 7:00 PM across daylight saving changes |
+| `recurrence` | the rule: `freq` (daily, weekly, monthly), `interval`, `weekdays` (weekly), `monthly` (`{mode:"day",day}` or `{mode:"nth",nth,weekday}`, nth 5 = last), `start`, `time`, `ends` (`never`, `on` a date, or `count`), and `changes` (the "this and all future" edits, each with a `from` date) |
+| `occurrence_overrides` | the few single dates an admin changed, keyed `"YYYY-MM-DD"`: `status` (`cancelled` or `deleted`), `cancel_reason`, and optional `title`, `location`, `body`, `time` |
 
-**`recurrence_exceptions`** (one row per changed occurrence):
+Dates are local calendar dates and times are local `HH:MM`, so "7:00 PM" stays 7:00 PM across daylight saving. The series row's own `event_time` is its first date, which keeps it sortable and keeps old code paths working. Pin and priority belong to the series.
 
-| column | purpose |
-|---|---|
-| `rule_id`, `occurrence_date` | which occurrence (the original date, never changes) |
-| `status` | `cancelled` or `deleted` (deleted occurrences are simply skipped) |
-| `cancel_reason` | the same 100-character reason as today |
-| `override_*` | optional per-occurrence title, room, notes or time (for "this week only, room 214") |
+**Expansion happens in the browser** (`assets/js/recurrence.js`, unit tested). Each page asks for the dates it needs and gets post-shaped objects with the id `<series id>@<date>`, so every occurrence is unique on a page. The calendar expands the visible month, the Updates page expands today, the next occurrence, cancelled dates and history, and the admin detail page expands a short strip of dates. A "never ends" rule is safe because every call is bounded.
 
-Why not simply insert 52 rows for a year? Because editing "all future" would then mean rewriting every row, a deleted series would leave debris, and the row count would grow forever. Computing occurrences from the rule keeps the database tiny and the edit rules trivial. A rolling window (the next 90 days) is generated in the browser for the calendar and lists.
+**Edit scopes** follow the proposal:
 
-Editing "this and all future occurrences" splits the series: the old rule gets an `ends_on` the day before, and a new rule starts on that date with the changes. This is the standard approach, and it keeps history intact without special cases.
+- *This occurrence* writes one override.
+- *This and all future* adds a `changes` entry (edit), sets `ends` to the day before (delete) or to that date plus a cancelled override (cancel). It is not offered on the first date, where it would equal the whole series.
+- *All occurrences* rewrites the series row and drops overrides that the wider edit makes pointless. It is offered for Edit and Delete, never for Cancel.
+
+Why not insert 52 rows for a year? Editing "all future" would mean rewriting every row, a deleted series would leave debris, and the row count would grow forever. One row per series keeps the database tiny and the edit rules short.
+
+## Where it shows
+
+- **Admin:** the New post form has the Repeat control (Daily, Weekly with day chips, Monthly with day or nth weekday, Custom every N days, weeks or months; Ends never, on a date, or after N times) with a live one-line summary. The list shows one card per series with a small "Repeats" mark, the rule, the next date and a "N changes" count. The detail page has a Dates strip (the last two and the next eight dates), and Edit, Cancel and Delete ask which dates they apply to.
+- **Readers:** the calendar, Updates page and history show each occurrence on its own date with a small repeat mark. A cancelled date becomes a cancelled hero card for that date only. A pinned series shows its next date.
 
 ## Notifications
 
-- Creating a series sends one notification ("New weekly post: Dhuhr prayer"), not one per occurrence.
-- Cancelling a single occurrence sends the existing cancellation notification, with the date.
-- Editing "all future" sends one change notification.
+- Creating a series sends one notification, the same as any new post, not one per occurrence.
+- Cancelling a single occurrence sends the usual cancellation notification with the date added to the title ("Study circle (Nov 11)"). The database trigger `notify_on_post_change` detects the newly cancelled override.
+- Cancelling "this and all future" is a cancel of that date plus an end date, so it sends the same single notification.
+- Editing a series (any scope) does not notify. That matches one-off posts, where edits are silent.
 
 ## Edge cases to decide up front
 
-1. **Time zones and daylight saving:** the rule stores a local time and a timezone, never a fixed UTC time.
-2. **A series with no end:** the calendar only ever looks 90 days ahead, so "Never" is safe.
-3. **Deleting a series:** the same soft delete as posts today (`status = deleted`), with the same slide-out, and every occurrence disappears everywhere at once.
-4. **Pin and priority:** apply to the series. An occurrence override can change them for one date if ever needed, but v1 leaves that out.
+1. **Time zones and daylight saving:** the rule stores a local date and time, never a fixed UTC time, so it follows the viewer's own clock (fine for a single campus).
+2. **A series with no end:** every expansion is bounded (a month, 180 days ahead, a year of history), so "Never" is safe.
+3. **Deleting a series:** the same soft delete as posts today (`status = deleted`), with the same slide-out; every occurrence disappears everywhere at once.
+4. **Pin and priority:** apply to the series. Overrides cover title, room, notes and time only.
 5. **Date edge cases:** monthly on the 29th to 31st falls back to the last day of shorter months.
-6. **Row-level security:** exactly the same as `updates`: readers can select, active executives can write.
+6. **Row-level security:** unchanged. The new columns sit on `updates`, so readers can select and active executives can write.
 
-## Suggested build order
+## Build order (all done)
 
-1. **Phase 1, repeat rules only:** Daily, Weekly and "ends on / never". The form control, the rule table, expansion on the calendar and Updates page, delete whole series. This alone covers daily prayers and weekly socials.
-2. **Phase 2, exceptions:** cancel or delete a single occurrence, with the scope sheet and the "Upcoming dates" strip.
-3. **Phase 3, the rest:** Monthly, Custom intervals, "After N times", "This and all future" splits, per-occurrence overrides, notification wording.
-
-Each phase ships something useful on its own, and none of them changes how one-off posts work.
+1. **Phase 1, repeat rules:** Daily, Weekly, "ends on / never"; the form control, expansion on the calendar and Updates page, delete whole series.
+2. **Phase 2, exceptions:** cancel or delete a single occurrence, the scope choices and the Dates strip.
+3. **Phase 3, the rest:** Monthly, Custom intervals, "After N times", "This and all future", per-occurrence overrides, notification wording.

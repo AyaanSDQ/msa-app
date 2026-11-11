@@ -1,6 +1,7 @@
 import { supabase } from "./supabase-client.js";
-import { icon } from "./icons.js?v=12";
+import { icon } from "./icons.js?v=13";
 import { TYPE_META, escapeHtml, formatTime, roomLabel, emptyCardHtml, animateRemove } from "./shared.js?v=25";
+import { expandSeries, describeRule } from "./recurrence.js?v=1";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
@@ -17,6 +18,7 @@ let view = "month"; // "month" | "agenda"
 let slide = ""; // "next" | "prev": direction of the month change animation
 let loading = true;
 const cache = new Map(); // "YYYY-M" -> updates[]
+let seriesRows = null; // repeating posts (one row each); their occurrences are worked out per month
 
 const monthKey = (y, m) => `${y}-${m}`;
 const dayKey = (d) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
@@ -31,10 +33,13 @@ async function init() {
     .channel("calendar-updates")
     .on("postgres_changes", { event: "*", schema: "public", table: "updates" }, (payload) => {
       cache.clear();
-      // A deleted event slides out first; every other change just refreshes quietly.
-      const gone = payload.new?.status === "deleted" ? root.querySelector(`[data-update-id="${payload.new.id}"]`) : null;
-      if (gone) animateRemove(gone, () => loadMonth(true));
-      else loadMonth(true);
+      seriesRows = null;
+      // A deleted event (or a whole deleted series) slides out first; every other change just refreshes quietly.
+      const id = payload.new?.id;
+      const gone = payload.new?.status === "deleted" && id ? [...root.querySelectorAll(`[data-update-id="${id}"], [data-update-id^="${id}@"]`)] : [];
+      if (!gone.length) return loadMonth(true);
+      let left = gone.length;
+      gone.forEach((el) => animateRemove(el, () => { if (--left === 0) loadMonth(true); }));
     })
     .subscribe();
 }
@@ -48,6 +53,7 @@ async function loadMonth(silent = false) {
     }
     const start = new Date(viewYear, viewMonth, 1);
     const end = new Date(viewYear, viewMonth + 1, 1);
+    if (!seriesRows) seriesRows = await fetchSeries();
     const { data, error } = await supabase
       .from("updates")
       .select("*")
@@ -58,15 +64,34 @@ async function loadMonth(silent = false) {
       .lt("event_time", end.toISOString())
       .order("event_time", { ascending: true });
     if (error) console.error("Failed to load calendar", error);
-    cache.set(key, data || []);
+    cache.set(key, (data || []).filter((r) => !r.recurrence));
   }
   loading = false;
   render();
 }
 
+async function fetchSeries() {
+  const { data, error } = await supabase
+    .from("updates")
+    .select("*")
+    .not("recurrence", "is", null)
+    .neq("status", "deleted")
+    .neq("type", "exec_meeting");
+  if (error) console.error("Failed to load repeating posts", error);
+  return data || [];
+}
+
+// Every occurrence of every repeating post that falls in the month on screen.
+function monthOccurrences() {
+  const start = new Date(viewYear, viewMonth, 1);
+  const end = new Date(viewYear, viewMonth + 1, 0);
+  return (seriesRows || []).flatMap((row) => expandSeries(row, start, end));
+}
+
 function eventsByDay() {
   const map = new Map();
-  for (const u of cache.get(monthKey(viewYear, viewMonth)) || []) {
+  const all = [...(cache.get(monthKey(viewYear, viewMonth)) || []), ...monthOccurrences()].sort((a, b) => new Date(a.event_time) - new Date(b.event_time));
+  for (const u of all) {
     const k = dayKey(new Date(u.event_time));
     if (!map.has(k)) map.set(k, []);
     map.get(k).push(u);
@@ -230,7 +255,7 @@ function eventCard(u) {
   return `<article class="cal-ev${cancelled ? " is-cancelled" : ""}" style="--c:var(--type-${u.type}-hero)" data-update-id="${u.id}">
     <div class="cal-ev-time">${escapeHtml(formatTime(u.event_time))}</div>
     <div class="cal-ev-body">
-      <div class="cal-ev-kicker"><i></i>${meta.label}</div>
+      <div class="cal-ev-kicker"><i></i>${meta.label}${u.is_occurrence ? `<span class="rec-mark" title="${escapeHtml(describeRule(u.recurrence))}">${icon("i-repeat", { size: 12 })}${escapeHtml(describeRule(u.recurrence).split(" · ")[0])}</span>` : ""}</div>
       <h3 class="cal-ev-title">${escapeHtml(u.title)}</h3>
       ${u.location ? `<div class="cal-ev-meta">${icon("i-pin", { size: 13 })}${escapeHtml(roomLabel(u.location))}</div>` : ""}
       ${u.body ? `<p class="cal-ev-notes">${escapeHtml(u.body)}</p>` : ""}

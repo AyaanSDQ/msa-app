@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ummah — Administrative</title>
-<link rel="stylesheet" href="assets/css/app.css?v=108">
+<link rel="stylesheet" href="assets/css/app.css?v=109">
 <link rel="icon" type="image/svg+xml" href="assets/icons/logo.svg">
 <link rel="icon" href="assets/icons/icon-192.png">
 <meta name="theme-color" content="#5b2e91">
@@ -72,6 +72,50 @@
             <div class="field"><label>Title</label><input class="input" name="title" required></div>
             <div class="field"><label id="location-label">Room number</label><input class="input" name="location"></div>
             <div class="field"><label>Time <span class="form-hint" id="time-hint">(required)</span></label><input class="input" type="datetime-local" name="event_time"></div>
+            <div class="field repeat-field">
+              <label for="repeat-select">Repeat</label>
+              <select id="repeat-select" class="input" name="repeat">
+                <option value="none">Does not repeat</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+                <option value="custom">Custom…</option>
+              </select>
+              <div id="repeat-panel" class="repeat-panel" hidden>
+                <div id="rep-custom" class="repeat-row" hidden>
+                  <span>Every</span>
+                  <input id="rep-interval" class="input input-sm" type="number" min="1" max="99" value="2" inputmode="numeric" aria-label="Repeat interval">
+                  <select id="rep-unit" class="input input-sm" aria-label="Repeat unit">
+                    <option value="daily">days</option>
+                    <option value="weekly">weeks</option>
+                    <option value="monthly">months</option>
+                  </select>
+                </div>
+                <div id="rep-days" class="repeat-days" role="group" aria-label="Days of the week" hidden>
+                  <button type="button" class="day-chip" data-day="0" aria-pressed="false" aria-label="Sunday">S</button>
+                  <button type="button" class="day-chip" data-day="1" aria-pressed="false" aria-label="Monday">M</button>
+                  <button type="button" class="day-chip" data-day="2" aria-pressed="false" aria-label="Tuesday">T</button>
+                  <button type="button" class="day-chip" data-day="3" aria-pressed="false" aria-label="Wednesday">W</button>
+                  <button type="button" class="day-chip" data-day="4" aria-pressed="false" aria-label="Thursday">T</button>
+                  <button type="button" class="day-chip" data-day="5" aria-pressed="false" aria-label="Friday">F</button>
+                  <button type="button" class="day-chip" data-day="6" aria-pressed="false" aria-label="Saturday">S</button>
+                </div>
+                <div id="rep-monthly" class="repeat-row" hidden>
+                  <select id="rep-monthly-mode" class="input input-sm" aria-label="Day of the month"></select>
+                </div>
+                <div class="repeat-row">
+                  <span>Ends</span>
+                  <select id="rep-ends" class="input input-sm" aria-label="When the repeat ends">
+                    <option value="never">Never</option>
+                    <option value="on">On a date</option>
+                    <option value="count">After a number of times</option>
+                  </select>
+                  <input id="rep-end-date" class="input input-sm" type="date" aria-label="End date" hidden>
+                  <input id="rep-end-count" class="input input-sm" type="number" min="1" max="999" value="10" inputmode="numeric" aria-label="Number of times" hidden>
+                </div>
+                <p id="repeat-summary" class="repeat-summary" role="status"></p>
+              </div>
+            </div>
             <div class="field"><label>Notes</label><textarea class="input" name="notes"></textarea></div>
             <div class="field">
               <label>Priority</label>
@@ -115,6 +159,8 @@
       <div id="detail-content" hidden>
         <div id="detail-card"></div>
 
+        <div id="occ-strip" class="occ-strip" hidden></div>
+
         <form id="notes-form" class="notes-form" hidden>
           <label for="notes-input">Notes</label>
           <textarea id="notes-input" class="input" name="notes" rows="3" maxlength="600" placeholder="Details readers will see on this post"></textarea>
@@ -124,9 +170,32 @@
           </div>
         </form>
 
+        <form id="edit-form" class="notes-form" hidden>
+          <div class="field"><label for="edit-title">Title</label><input id="edit-title" class="input" name="title" maxlength="120" required></div>
+          <div class="field"><label for="edit-location">Room number</label><input id="edit-location" class="input" name="location"></div>
+          <div class="field"><label for="edit-time">Time</label><input id="edit-time" class="input" type="time" name="time" required></div>
+          <div class="field"><label for="edit-body">Notes</label><textarea id="edit-body" class="input" name="body" rows="3" maxlength="600"></textarea></div>
+          <fieldset class="scope-group" id="edit-scope"></fieldset>
+          <div id="edit-error" class="cancel-error" role="alert" hidden></div>
+          <div class="notes-actions">
+            <button type="submit" class="btn btn-primary">Save changes</button>
+            <button type="button" id="edit-back" class="btn btn-secondary">Discard</button>
+          </div>
+        </form>
+
+        <form id="delete-form" class="cancel-form" hidden>
+          <label>Delete which dates?</label>
+          <fieldset class="scope-group" id="delete-scope"></fieldset>
+          <div class="cancel-actions">
+            <button type="submit" class="btn btn-delete-action">Delete</button>
+            <button type="button" id="delete-back" class="btn btn-secondary">Keep</button>
+          </div>
+        </form>
+
         <form id="cancel-form" class="cancel-form" hidden>
           <label for="cancel-reason">Reason for cancellation</label>
           <input id="cancel-reason" class="input" name="reason" maxlength="99" autocomplete="off" placeholder="For example: room unavailable">
+          <fieldset class="scope-group" id="cancel-scope" hidden></fieldset>
           <div class="cancel-meta"><span id="cancel-error" class="cancel-error" role="alert" hidden></span><span class="cancel-counter"><span id="cancel-count">0</span>/99</span></div>
           <div class="cancel-actions">
             <button type="submit" class="btn btn-delete-action">Cancel this post</button>
@@ -158,7 +227,7 @@
 </div>
 
 <script type="module">
-  import { ICON_SPRITE, icon } from "./assets/js/icons.js?v=12";
+  import { ICON_SPRITE, icon } from "./assets/js/icons.js?v=13";
   document.getElementById("icon-sprite").innerHTML = ICON_SPRITE;
   document.querySelector(".plus-icon").innerHTML = icon("i-plus", { size: 16, stroke: 2.75 });
   document.getElementById("new-post-chev").innerHTML = icon("i-chev", { size: 15, stroke: 2.75 });
@@ -171,7 +240,7 @@
   });
   document.querySelectorAll(".back-icon").forEach((el) => { el.innerHTML = icon("i-back", { size: 14, stroke: 2.75 }); });
 </script>
-<script type="module" src="assets/js/exec.js?v=38"></script>
+<script type="module" src="assets/js/exec.js?v=39"></script>
 <script src="assets/js/fx.js?v=4" defer></script>
 <script src="assets/js/sw-register.js?v=1"></script>
 </body>
