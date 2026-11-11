@@ -19,7 +19,7 @@ Builds on `msa-app-spec.md`. This document covers product behavior, not implemen
 - **Receive push notifications** on new posts (where supported), deep-linking to the specific post via a URL anchor.
 - **Never** see: exec-meeting posts, deleted posts, or any feedback content.
 
-### Executives (logged in, Supabase Auth email/password, pre-created accounts)
+### Executives (logged in, Supabase Auth, username + password (no email stored), pre-created accounts)
 
 - **Log in / log out.**
 - View the **full events list**, a superset of the public view: includes exec-meeting posts, shows cancelled posts inline (badge), shows deleted posts inline (greyed out + trash icon + status label) — no separate trash page.
@@ -27,7 +27,7 @@ Builds on `msa-app-spec.md`. This document covers product behavior, not implemen
 - **Open an individual post's detail page** (reached from the list) to: view all feedback submitted on that post, **Cancel** it, **Delete** it (soft delete), or **Restore** it (if currently deleted).
 - Every post shows **attribution** (posted by which exec) in both the list and detail views.
 - **No in-app edit** — corrections are made by posting a new post of the same type, which becomes the new current/hero (by design, see spec §7).
-- **No in-app executive-roster management** — adding/removing who counts as an exec is handled outside the app (Ayaan manages the `executives` table directly after execs send their name/email).
+- **No in-app executive-roster management** — adding/removing who counts as an exec is handled outside the app (Ayaan manages the `executives` table directly after execs send their name and chosen username).
 
 ---
 

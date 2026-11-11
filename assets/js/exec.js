@@ -139,13 +139,17 @@ function showDetailView() {
 
 // ── Login ────────────────────────────────────────────────────────────────
 
-// Supabase signs in with an email, so a plain username is mapped to a private
-// address on a reserved domain. Typing a full email address still works too.
-const USERNAME_EMAIL_DOMAIN = "ummah.example.com";
+// Executives log in with a username only; no email address is ever collected,
+// stored or used. Supabase Auth itself needs an email-shaped identifier, so the
+// username is turned into a placeholder on a reserved domain that can never
+// receive mail. Anything that isn't a valid username (a real email address
+// included) is rejected here and never reaches Supabase.
+const AUTH_PLACEHOLDER_DOMAIN = "ummah.example.com";
+const USERNAME_PATTERN = /^[a-z0-9][a-z0-9._-]{1,30}$/; // same rule as executives.username in the database
 
-function usernameToEmail(input) {
-  const value = input.trim().toLowerCase();
-  return value.includes("@") ? value : `${value.replace(/\s+/g, "")}@${USERNAME_EMAIL_DOMAIN}`;
+function usernameToAuthId(input) {
+  const username = input.trim().toLowerCase();
+  return USERNAME_PATTERN.test(username) ? `${username}@${AUTH_PLACEHOLDER_DOMAIN}` : null;
 }
 
 function wireLoginForm() {
@@ -155,9 +159,11 @@ function wireLoginForm() {
     loginSubmit.disabled = true;
     loginSubmit.textContent = "Logging in…";
 
-    const email = usernameToEmail(loginForm.username.value);
+    const authId = usernameToAuthId(loginForm.username.value);
     const password = loginForm.password.value;
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = authId
+      ? await supabase.auth.signInWithPassword({ email: authId, password })
+      : { error: new Error("Invalid username") };
 
     loginSubmit.disabled = false;
     loginSubmit.textContent = "Log in";
